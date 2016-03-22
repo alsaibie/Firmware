@@ -92,7 +92,9 @@ set(config_module_list
 	modules/fw_att_control
 	modules/mc_att_control
 	modules/mc_pos_control
+	modules/dp_att_control
 	modules/vtol_att_control
+	
 
 	#
 	# Logging
