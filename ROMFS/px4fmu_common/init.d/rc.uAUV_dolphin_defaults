@@ -1,0 +1,22 @@
+#!nsh
+#
+# Dolphin Default Configuration. Gets called by 60001_uAUV_Dolphin
+#
+# Ali AlSaibie <ali@alsaibie.com>
+#
+
+set VEHICLE_TYPE uAUV
+
+# PWM Hz - 50 Hz for now. Adjust according to ESCs
+set PWM_RATE 50
+
+# PWM default value for "disarmed" mode
+# since ESCs are programmed to work in bi-directional mode
+set PWM_DISARMED 1500
+
+# PWM range
+set PWM_MIN 1200
+set PWM_MAX 1800
+
+# Only 4 PWM channels are used. 1 to 4
+set PWM_OUT 1234

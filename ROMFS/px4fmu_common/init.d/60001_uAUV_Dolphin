@@ -1,0 +1,16 @@
+#!nsh#!nsh
+#
+# @name Dolphin Prototype a
+#
+# @type Submarine
+#
+# @maintainer Ali AlSaibie <ali@alsaibie.com>
+#
+# Loading default values for the uAUV Dolphin
+#
+
+#load some defaults e.g. PWM values
+sh /etc/init.d/rc.uAUV_dolphin_defaults
+
+#choose a mixer, for uAUV control we need a plain passthrough to the servos, for now
+set MIXER IO_pass

@@ -134,7 +134,7 @@ px4fmu-v2_default:
 px4fmu-v4_default:
 	$(call cmake-build,nuttx_px4fmu-v4_default)
 
-px4fmu-v4_default:
+px4fmu-v4_dolphin:
 	$(call cmake-build,nuttx_px4fmu-v4_dolphin)
 	
 px4-stm32f4discovery_default:

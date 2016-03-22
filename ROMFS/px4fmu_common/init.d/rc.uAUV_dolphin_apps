@@ -1,0 +1,23 @@
+#!nsh
+#
+# Standard apps for uAUVs:
+# att & pos estimator, swim control
+#
+
+# Start Invertial Navigation Estimator
+	attitude_estimator_q start
+
+# Start Position Estimator_Inav
+#	position_estimator_inav start
+
+# Start Attitude Estimator 
+ 	dp_att_control start
+#
+
+# Start Position Estimator
+# dolphin_pos_control start
+#
+
+# Start Swim Control
+
+#

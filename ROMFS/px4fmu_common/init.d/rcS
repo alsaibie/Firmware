@@ -730,6 +730,25 @@ then
 
 		param set MAV_TYPE 10
 	fi
+	
+	#
+	# uAUV setup
+	#
+	if [ $VEHICLE_TYPE == uAUV ]
+	then
+		# 12 is MAV_TYPE_SUBMARINE
+		set MAV_TYPE 12
+
+		# Load mixer and configure outputs
+		sh /etc/init.d/rc.interface
+
+		# Start standard uAUV swimmer apps
+		if [ $LOAD_DAPPS == yes ]
+		then
+			sh /etc/init.d/rc.uAUV_dolphin_apps
+		fi
+		param set MAV_TYPE 12
+	fi
 
 	unset MIXER
 	unset MAV_TYPE

@@ -2,8 +2,10 @@ To Do:
 
 Add Target:DONE
 Add Optical_Pose Topic: DONE
-Add PX4Flow_Pose Driver:
+Add PX4Flow_Pose Driver: DONE
 Add DolphinLED Driver:
 Add Dolphin Control Apps:
-Add Startup Scripts:
+	Adjust Yaw Control: 
+Add Startup Scripts: DONE
+Add Virtual Actuator Controls for Dolphin: Not Needed
 
