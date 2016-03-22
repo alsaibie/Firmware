@@ -183,6 +183,9 @@ ORB_DEFINE(optical_flow, struct optical_flow_s);
 #include "topics/filtered_bottom_flow.h"
 ORB_DEFINE(filtered_bottom_flow, struct filtered_bottom_flow_s);
 
+#include "topics/optical_pose.h"
+ORB_DEFINE(optical_pose, struct optical_pose_s);
+
 #include "topics/airspeed.h"
 ORB_DEFINE(airspeed, struct airspeed_s);
 
