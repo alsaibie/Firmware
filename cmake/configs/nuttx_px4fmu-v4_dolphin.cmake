@@ -37,7 +37,8 @@ set(config_module_list
 	drivers/frsky_telemetry
 	modules/sensors
 	drivers/mkblctrl
-	drivers/px4flow
+	#drivers/px4flow
+	drivers/px4pose
 	drivers/oreoled
 	drivers/gimbal
 	drivers/pwm_input
