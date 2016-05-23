@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2012-2015 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2012-2016 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -42,13 +42,13 @@
  *
  * @unit Hz
  * @min -1
- * @max  100
+ * @max  250
  * @group SD Logging
  */
 PARAM_DEFINE_INT32(SDLOG_RATE, -1);
 
 /**
- * Enable extended logging mode.
+ * Extended logging mode
  *
  * A value of -1 indicates the command line argument
  * should be obeyed. A value of 0 disables extended
@@ -56,12 +56,11 @@ PARAM_DEFINE_INT32(SDLOG_RATE, -1);
  * parameter is only read out before logging starts
  * (which commonly is before arming).
  *
- * @unit enum
  * @min -1
  * @max  1
- * @value -1 command line
- * @value 0 disable
- * @value 1 enable
+ * @value -1 Command Line
+ * @value 0 Disable
+ * @value 1 Enable
  * @group SD Logging
  */
 PARAM_DEFINE_INT32(SDLOG_EXT, -1);
@@ -69,32 +68,14 @@ PARAM_DEFINE_INT32(SDLOG_EXT, -1);
 /**
  * Use timestamps only if GPS 3D fix is available
  *
- * A value of 1 constrains the log folder creation
+ * Constrain the log folder creation
  * to only use the time stamp if a 3D GPS lock is
  * present.
  *
- * @unit boolean
+ * @boolean
  * @group SD Logging
  */
 PARAM_DEFINE_INT32(SDLOG_GPSTIME, 1);
-
-/**
- * UTC offset (unit: min)
- *
- * the difference in hours and minutes from Coordinated 
- * Universal Time (UTC) for a your place and date.
- *
- * for example, In case of South Korea(UTC+09:00), 
- * UTC offset is 540 min (9*60)
- *
- * refer to https://en.wikipedia.org/wiki/List_of_UTC_time_offsets
- *
- * @unit min
- * @min -1000
- * @max  1000
- * @group SD Logging
- */
-PARAM_DEFINE_INT32(SDLOG_UTC_OFFSET, 0);
 
 /**
  * Give logging app higher thread priority to avoid data loss.
@@ -104,7 +85,11 @@ PARAM_DEFINE_INT32(SDLOG_UTC_OFFSET, 0);
  * Increasing the parameter in steps of one increases the priority.
  *
  * @min 0
- * @max 3
+ * @max  3
+ * @value 0 Low priority
+ * @value 1 Default priority
+ * @value 2 Medium priority
+ * @value 3 Max priority
  * @group SD Logging
  */
-PARAM_DEFINE_INT32(SDLOG_PRIO_BOOST, 0);
+PARAM_DEFINE_INT32(SDLOG_PRIO_BOOST, 2);

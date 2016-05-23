@@ -79,14 +79,11 @@
 #include <lib/rc/sumd.h>
 
 #include <uORB/topics/actuator_controls.h>
-#include <uORB/topics/actuator_controls_0.h>
-#include <uORB/topics/actuator_controls_1.h>
-#include <uORB/topics/actuator_controls_2.h>
-#include <uORB/topics/actuator_controls_3.h>
 #include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/safety.h>
+#include <uORB/topics/adc_report.h>
 
 
 #ifdef HRT_PPM_CHANNEL
@@ -180,7 +177,10 @@ private:
 	struct work_s	_work;
 	int		_armed_sub;
 	int		_param_sub;
+	int		_adc_sub;
 	struct rc_input_values	_rc_in;
+	float		_analog_rc_rssi_volt;
+	bool		_analog_rc_rssi_stable;
 	orb_advert_t	_to_input_rc;
 	orb_advert_t	_outputs_pub;
 	unsigned	_num_outputs;
@@ -214,6 +214,7 @@ private:
 	unsigned	_num_failsafe_set;
 	unsigned	_num_disarmed_set;
 	bool		_safety_off;
+	bool		_safety_disabled;
 	orb_advert_t		_to_safety;
 
 	static bool	arm_nothrottle() { return (_armed.prearmed && !_armed.armed); }
@@ -321,6 +322,22 @@ const PX4FMU::GPIOConfig PX4FMU::_gpio_tab[] = {
 	{GPIO_GPIO10_INPUT,      GPIO_GPIO10_OUTPUT,      0},
 	{GPIO_GPIO11_INPUT,      GPIO_GPIO11_OUTPUT,      0},
 #endif
+#if  defined(CONFIG_ARCH_BOARD_MINDPX_V2)
+	{GPIO_GPIO0_INPUT,       GPIO_GPIO0_OUTPUT,       0},
+	{GPIO_GPIO1_INPUT,       GPIO_GPIO1_OUTPUT,       0},
+	{GPIO_GPIO2_INPUT,       GPIO_GPIO2_OUTPUT,       0},
+	{GPIO_GPIO3_INPUT,       GPIO_GPIO3_OUTPUT,       0},
+	{GPIO_GPIO4_INPUT,       GPIO_GPIO4_OUTPUT,       0},
+	{GPIO_GPIO5_INPUT,       GPIO_GPIO5_OUTPUT,       0},
+	{GPIO_GPIO6_INPUT,       GPIO_GPIO6_OUTPUT,       0},
+	{GPIO_GPIO7_INPUT,       GPIO_GPIO7_OUTPUT,       0},
+	{GPIO_GPIO8_INPUT,       GPIO_GPIO8_OUTPUT,       0},
+	{GPIO_GPIO9_INPUT,       GPIO_GPIO9_OUTPUT,       0},
+	{GPIO_GPIO10_INPUT,      GPIO_GPIO10_OUTPUT,       0},
+	{GPIO_GPIO11_INPUT,      GPIO_GPIO11_OUTPUT,       0},
+	{GPIO_GPIO12_INPUT,      GPIO_GPIO12_OUTPUT,       0},
+	{0,       0,       0},
+#endif
 };
 
 const unsigned		PX4FMU::_ngpio = sizeof(PX4FMU::_gpio_tab) / sizeof(PX4FMU::_gpio_tab[0]);
@@ -344,7 +361,10 @@ PX4FMU::PX4FMU() :
 	_work{},
 	_armed_sub(-1),
 	_param_sub(-1),
+	_adc_sub(-1),
 	_rc_in{},
+	_analog_rc_rssi_volt(-1.0f),
+	_analog_rc_rssi_stable(false),
 	_to_input_rc(nullptr),
 	_outputs_pub(nullptr),
 	_num_outputs(0),
@@ -366,6 +386,7 @@ PX4FMU::PX4FMU() :
 	_num_failsafe_set(0),
 	_num_disarmed_set(0),
 	_safety_off(false),
+	_safety_disabled(false),
 	_to_safety(nullptr)
 {
 	for (unsigned i = 0; i < _max_actuators; i++) {
@@ -443,6 +464,8 @@ PX4FMU::init()
 	} else if (_class_instance < 0) {
 		warnx("FAILED registering class device");
 	}
+
+	_safety_disabled = circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY);
 
 	work_start();
 
@@ -815,8 +838,14 @@ PX4FMU::fill_rc_in(uint16_t raw_rc_count,
 		_rc_in.channel_count = input_rc_s::RC_INPUT_MAX_CHANNELS;
 	}
 
-	for (uint8_t i = 0; i < _rc_in.channel_count; i++) {
+	unsigned valid_chans = 0;
+
+	for (unsigned i = 0; i < _rc_in.channel_count; i++) {
 		_rc_in.values[i] = raw_rc_values[i];
+
+		if (raw_rc_values[i] != UINT16_MAX) {
+			valid_chans++;
+		}
 	}
 
 	_rc_in.timestamp_publication = now;
@@ -825,15 +854,35 @@ PX4FMU::fill_rc_in(uint16_t raw_rc_count,
 
 	/* fake rssi if no value was provided */
 	if (rssi == -1) {
-		_rc_in.rssi =
-			(!frame_drop) ? RC_INPUT_RSSI_MAX : (RC_INPUT_RSSI_MAX / 2);
+
+		/* set RSSI if analog RSSI input is present */
+		if (_analog_rc_rssi_stable) {
+			float rssi_analog = ((_analog_rc_rssi_volt - 0.2f) / 3.0f) * 100.0f;
+
+			if (rssi_analog > 100.0f) {
+				rssi_analog = 100.0f;
+			}
+
+			if (rssi_analog < 0.0f) {
+				rssi_analog = 0.0f;
+			}
+
+			_rc_in.rssi = rssi_analog;
+
+		} else {
+			_rc_in.rssi = 255;
+		}
 
 	} else {
 		_rc_in.rssi = rssi;
 	}
 
+	if (valid_chans == 0) {
+		_rc_in.rssi = 0;
+	}
+
 	_rc_in.rc_failsafe = failsafe;
-	_rc_in.rc_lost = false;
+	_rc_in.rc_lost = (valid_chans == 0);
 	_rc_in.rc_lost_frame_count = frame_drops;
 	_rc_in.rc_total_frame_count = 0;
 }
@@ -889,6 +938,7 @@ PX4FMU::cycle()
 
 		_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 		_param_sub = orb_subscribe(ORB_ID(parameter_update));
+		_adc_sub = orb_subscribe(ORB_ID(adc_report));
 
 		/* initialize PWM limit lib */
 		pwm_limit_init(&_pwm_limit);
@@ -1070,7 +1120,7 @@ PX4FMU::cycle()
 		 */
 		struct safety_s safety = {};
 
-		if (circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY)) {
+		if (_safety_disabled) {
 			/* safety switch disabled, turn LED on solid */
 			stm32_gpiowrite(GPIO_LED_SAFETY, 0);
 			_safety_off = true;
@@ -1142,6 +1192,35 @@ PX4FMU::cycle()
 		}
 	}
 
+	/* update ADC sampling */
+#ifdef ADC_RC_RSSI_CHANNEL
+	orb_check(_adc_sub, &updated);
+
+	if (updated) {
+
+		struct adc_report_s adc;
+		orb_copy(ORB_ID(adc_report), _adc_sub, &adc);
+		const unsigned adc_chans = sizeof(adc.channel_id) / sizeof(adc.channel_id[0]);
+
+		for (unsigned i = 0; i < adc_chans; i++) {
+			if (adc.channel_id[i] == ADC_RC_RSSI_CHANNEL) {
+
+				if (_analog_rc_rssi_volt < 0.0f) {
+					_analog_rc_rssi_volt = adc.channel_value[i];
+				}
+
+				_analog_rc_rssi_volt = _analog_rc_rssi_volt * 0.995f + adc.channel_value[i] * 0.005f;
+
+				/* only allow this to be used if we see a high RSSI once */
+				if (_analog_rc_rssi_volt > 2.5f) {
+					_analog_rc_rssi_stable = true;
+				}
+			}
+		}
+	}
+
+#endif
+
 	bool rc_updated = false;
 
 #ifdef RC_SERIAL_PORT
@@ -1158,7 +1237,7 @@ PX4FMU::cycle()
 
 	if (_report_lock && _rc_scan_locked) {
 		_report_lock = false;
-		warnx("RCscan: %s RC input locked", RC_SCAN_STRING[_rc_scan_state]);
+		//warnx("RCscan: %s RC input locked", RC_SCAN_STRING[_rc_scan_state]);
 	}
 
 	// read all available data from the serial RC input UART
@@ -1243,7 +1322,7 @@ PX4FMU::cycle()
 
 				rc_updated = false;
 
-				for (unsigned i = 0; i < newBytes; i++) {
+				for (unsigned i = 0; i < (unsigned)newBytes; i++) {
 					/* set updated flag if one complete packet was parsed */
 					st24_rssi = RC_INPUT_RSSI_MAX;
 					rc_updated = (OK == st24_decode(_rcs_buf[i], &st24_rssi, &rx_count,
@@ -1282,7 +1361,7 @@ PX4FMU::cycle()
 
 				rc_updated = false;
 
-				for (unsigned i = 0; i < newBytes; i++) {
+				for (unsigned i = 0; i < (unsigned)newBytes; i++) {
 					/* set updated flag if one complete packet was parsed */
 					sumd_rssi = RC_INPUT_RSSI_MAX;
 					rc_updated = (OK == sumd_decode(_rcs_buf[i], &sumd_rssi, &rx_count,
@@ -1327,6 +1406,8 @@ PX4FMU::cycle()
 				fill_rc_in(ppm_decoded_channels, ppm_buffer, _cycle_timestamp,
 					   false, false, 0);
 				_rc_scan_locked = true;
+				_rc_in.rc_ppm_frame_length = ppm_frame_length;
+				_rc_in.timestamp_last_signal = ppm_last_valid_decode;
 			}
 
 		} else {
@@ -1501,9 +1582,16 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 
 	case PWM_SERVO_SET_ARM_OK:
 	case PWM_SERVO_CLEAR_ARM_OK:
+		break;
+
 	case PWM_SERVO_SET_FORCE_SAFETY_OFF:
+		/* force safety switch off */
+		_safety_off = true;
+		break;
+
 	case PWM_SERVO_SET_FORCE_SAFETY_ON:
-		// these are no-ops, as no safety switch
+		/* force safety switch on */
+		_safety_off = false;
 		break;
 
 	case PWM_SERVO_DISARM:
@@ -1859,7 +1947,8 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 				set_mode(MODE_4PWM);
 				break;
 
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4) \
+	|| defined(CONFIG_ARCH_BOARD_MINDPX_V2)
 
 			case 6:
 				set_mode(MODE_6PWM);
@@ -1875,6 +1964,59 @@ PX4FMU::pwm_ioctl(file *filp, int cmd, unsigned long arg)
 			default:
 				ret = -EINVAL;
 				break;
+			}
+
+			break;
+		}
+
+	case PWM_SERVO_SET_MODE: {
+			switch (arg) {
+			case PWM_SERVO_MODE_NONE:
+				ret = set_mode(MODE_NONE);
+				break;
+
+			case PWM_SERVO_MODE_2PWM:
+				ret = set_mode(MODE_2PWM);
+				break;
+
+			case PWM_SERVO_MODE_2PWM2CAP:
+				ret = set_mode(MODE_2PWM2CAP);
+				break;
+
+			case PWM_SERVO_MODE_3PWM:
+				ret = set_mode(MODE_3PWM);
+				break;
+
+			case PWM_SERVO_MODE_3PWM1CAP:
+				ret = set_mode(MODE_3PWM1CAP);
+				break;
+
+			case PWM_SERVO_MODE_4PWM:
+				ret = set_mode(MODE_4PWM);
+				break;
+
+			case PWM_SERVO_MODE_6PWM:
+				ret = set_mode(MODE_6PWM);
+				break;
+
+			case PWM_SERVO_MODE_8PWM:
+				ret = set_mode(MODE_8PWM);
+				break;
+
+			case PWM_SERVO_MODE_4CAP:
+				ret = set_mode(MODE_4CAP);
+				break;
+
+			case PWM_SERVO_MODE_5CAP:
+				ret = set_mode(MODE_5CAP);
+				break;
+
+			case PWM_SERVO_MODE_6CAP:
+				ret = set_mode(MODE_6CAP);
+				break;
+
+			default:
+				ret = -EINVAL;
 			}
 
 			break;
@@ -2183,6 +2325,89 @@ PX4FMU::sensor_reset(int ms)
 
 #endif
 #endif
+
+#if  defined(CONFIG_ARCH_BOARD_MINDPX_V2)
+
+	if (ms < 1) {
+		ms = 1;
+	}
+
+	/* disable SPI bus */
+	stm32_configgpio(GPIO_SPI_CS_GYRO_OFF);
+	stm32_configgpio(GPIO_SPI_CS_ACCEL_MAG_OFF);
+	stm32_configgpio(GPIO_SPI_CS_BARO_OFF);
+	//      stm32_configgpio(GPIO_SPI_CS_FRAM_OFF);
+	stm32_configgpio(GPIO_SPI_CS_MPU_OFF);
+
+	stm32_gpiowrite(GPIO_SPI_CS_GYRO_OFF, 0);
+	stm32_gpiowrite(GPIO_SPI_CS_ACCEL_MAG_OFF, 0);
+	stm32_gpiowrite(GPIO_SPI_CS_BARO_OFF, 0);
+	//       stm32_gpiowrite(GPIO_SPI_CS_FRAM_OFF,0);
+	stm32_gpiowrite(GPIO_SPI_CS_MPU_OFF, 0);
+
+	stm32_configgpio(GPIO_SPI4_SCK_OFF);
+	stm32_configgpio(GPIO_SPI4_MISO_OFF);
+	stm32_configgpio(GPIO_SPI4_MOSI_OFF);
+
+	stm32_gpiowrite(GPIO_SPI4_SCK_OFF, 0);
+	stm32_gpiowrite(GPIO_SPI4_MISO_OFF, 0);
+	stm32_gpiowrite(GPIO_SPI4_MOSI_OFF, 0);
+
+	stm32_configgpio(GPIO_GYRO_DRDY_OFF);
+	stm32_configgpio(GPIO_MAG_DRDY_OFF);
+	stm32_configgpio(GPIO_ACCEL_DRDY_OFF);
+	stm32_configgpio(GPIO_EXTI_MPU_DRDY_OFF);
+
+	stm32_gpiowrite(GPIO_GYRO_DRDY_OFF, 0);
+	stm32_gpiowrite(GPIO_MAG_DRDY_OFF, 0);
+	stm32_gpiowrite(GPIO_ACCEL_DRDY_OFF, 0);
+	stm32_gpiowrite(GPIO_EXTI_MPU_DRDY_OFF, 0);
+
+	//        /* set the sensor rail off */
+	//        stm32_configgpio(GPIO_VDD_3V3_SENSORS_EN);
+	//        stm32_gpiowrite(GPIO_VDD_3V3_SENSORS_EN, 0);
+	//
+	/* wait for the sensor rail to reach GND */
+	usleep(ms * 1000);
+	warnx("reset done, %d ms", ms);
+	//
+	//        /* re-enable power */
+	//
+	//        /* switch the sensor rail back on */
+	//        stm32_gpiowrite(GPIO_VDD_3V3_SENSORS_EN, 1);
+	//
+	/* wait a bit before starting SPI, different times didn't influence results */
+	usleep(100);
+
+	/* reconfigure the SPI pins */
+#ifdef CONFIG_STM32_SPI4
+	stm32_configgpio(GPIO_SPI_CS_GYRO);
+	stm32_configgpio(GPIO_SPI_CS_ACCEL_MAG);
+	stm32_configgpio(GPIO_SPI_CS_BARO);
+	//        stm32_configgpio(GPIO_SPI_CS_FRAM);
+	stm32_configgpio(GPIO_SPI_CS_MPU);
+
+	/* De-activate all peripherals,
+	* required for some peripheral
+	* state machines
+	*/
+	stm32_gpiowrite(GPIO_SPI_CS_GYRO, 1);
+	stm32_gpiowrite(GPIO_SPI_CS_ACCEL_MAG, 1);
+	stm32_gpiowrite(GPIO_SPI_CS_BARO, 1);
+	stm32_gpiowrite(GPIO_SPI_CS_FRAM, 1);
+	stm32_gpiowrite(GPIO_SPI_CS_MPU, 1);
+
+	stm32_configgpio(GPIO_SPI4_SCK);
+	stm32_configgpio(GPIO_SPI4_MISO);
+	stm32_configgpio(GPIO_SPI4_MOSI);
+
+	// // XXX bring up the EXTI pins again
+	// stm32_configgpio(GPIO_GYRO_DRDY);
+	// stm32_configgpio(GPIO_MAG_DRDY);
+	// stm32_configgpio(GPIO_ACCEL_DRDY);
+
+#endif
+#endif
 }
 
 void
@@ -2232,6 +2457,13 @@ PX4FMU::peripheral_reset(int ms)
 	stm32_gpiowrite(GPIO_SPEKTRUM_PWR_EN, last);
 	stm32_gpiowrite(GPIO_PERIPH_3V3_EN, 1);
 #endif
+#if defined(CONFIG_ARCH_BOARD_MINDPX_V2)
+
+	if (ms < 1) {
+		ms = 10;
+	}
+
+#endif
 }
 
 void
@@ -2270,7 +2502,9 @@ PX4FMU::gpio_set_function(uint32_t gpios, int function)
 		gpios |= 3;
 
 		/* flip the buffer to output mode if required */
-		if (GPIO_SET_OUTPUT == function) {
+		if (GPIO_SET_OUTPUT == function ||
+		    GPIO_SET_OUTPUT_LOW == function ||
+		    GPIO_SET_OUTPUT_HIGH == function) {
 			stm32_gpiowrite(GPIO_GPIO_DIR, 1);
 		}
 	}
@@ -2287,6 +2521,14 @@ PX4FMU::gpio_set_function(uint32_t gpios, int function)
 
 			case GPIO_SET_OUTPUT:
 				stm32_configgpio(_gpio_tab[i].output);
+				break;
+
+			case GPIO_SET_OUTPUT_LOW:
+				stm32_configgpio((_gpio_tab[i].output & ~(GPIO_OUTPUT_SET)) | GPIO_OUTPUT_CLEAR);
+				break;
+
+			case GPIO_SET_OUTPUT_HIGH:
+				stm32_configgpio((_gpio_tab[i].output & ~(GPIO_OUTPUT_CLEAR)) | GPIO_OUTPUT_SET);
 				break;
 
 			case GPIO_SET_ALT_1:
@@ -2484,6 +2726,8 @@ PX4FMU::gpio_ioctl(struct file *filp, int cmd, unsigned long arg)
 		break;
 
 	case GPIO_SET_OUTPUT:
+	case GPIO_SET_OUTPUT_LOW:
+	case GPIO_SET_OUTPUT_HIGH:
 	case GPIO_SET_INPUT:
 	case GPIO_SET_ALT_1:
 		gpio_set_function(arg, cmd);
@@ -2517,18 +2761,18 @@ void
 PX4FMU::dsm_bind_ioctl(int dsmMode)
 {
 	if (!_armed.armed) {
-//      mavlink_log_info(_mavlink_fd, "[FMU] binding DSM%s RX", (dsmMode == 0) ? "2" : ((dsmMode == 1) ? "-X" : "-X8"));
+//      mavlink_log_info(&_mavlink_log_pub, "[FMU] binding DSM%s RX", (dsmMode == 0) ? "2" : ((dsmMode == 1) ? "-X" : "-X8"));
 		warnx("[FMU] binding DSM%s RX", (dsmMode == 0) ? "2" : ((dsmMode == 1) ? "-X" : "-X8"));
 		int ret = ioctl(nullptr, DSM_BIND_START,
 				(dsmMode == 0) ? DSM2_BIND_PULSES : ((dsmMode == 1) ? DSMX_BIND_PULSES : DSMX8_BIND_PULSES));
 
 		if (ret) {
-//            mavlink_log_critical(_mavlink_fd, "binding failed.");
+//            mavlink_log_critical(&_mavlink_log_pub, "binding failed.");
 			warnx("binding failed.");
 		}
 
 	} else {
-//        mavlink_log_info(_mavlink_fd, "[FMU] system armed, bind request rejected");
+//        mavlink_log_info(&_mavlink_log_pub, "[FMU] system armed, bind request rejected");
 		warnx("[FMU] system armed, bind request rejected");
 	}
 }
@@ -2574,7 +2818,8 @@ fmu_new_mode(PortMode new_mode)
 		/* select 4-pin PWM mode */
 		servo_mode = PX4FMU::MODE_4PWM;
 #endif
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4) \
+	||  defined(CONFIG_ARCH_BOARD_MINDPX_V2)
 		servo_mode = PX4FMU::MODE_6PWM;
 #endif
 #if defined(CONFIG_ARCH_BOARD_AEROCORE)
@@ -2582,7 +2827,8 @@ fmu_new_mode(PortMode new_mode)
 #endif
 		break;
 
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4) \
+	|| defined(CONFIG_ARCH_BOARD_MINDPX_V2)
 
 	case PORT_PWM4:
 		/* select 4-pin PWM mode */
@@ -3015,7 +3261,8 @@ fmu_main(int argc, char *argv[])
 	} else if (!strcmp(verb, "mode_pwm")) {
 		new_mode = PORT_FULL_PWM;
 
-#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4)
+#if defined(CONFIG_ARCH_BOARD_PX4FMU_V2) ||  defined(CONFIG_ARCH_BOARD_PX4FMU_V4) \
+	||  defined(CONFIG_ARCH_BOARD_MINDPX_V2)
 
 	} else if (!strcmp(verb, "mode_pwm4")) {
 		new_mode = PORT_PWM4;
@@ -3106,7 +3353,8 @@ fmu_main(int argc, char *argv[])
 #if defined(CONFIG_ARCH_BOARD_PX4FMU_V1)
 	fprintf(stderr,
 		"  mode_gpio, mode_serial, mode_pwm, mode_gpio_serial, mode_pwm_serial, mode_pwm_gpio, test, fake, sensor_reset, id\n");
-#elif defined(CONFIG_ARCH_BOARD_PX4FMU_V2) || defined(CONFIG_ARCH_BOARD_PX4FMU_V4) || defined(CONFIG_ARCH_BOARD_AEROCORE)
+#elif defined(CONFIG_ARCH_BOARD_PX4FMU_V2) || defined(CONFIG_ARCH_BOARD_PX4FMU_V4) || defined(CONFIG_ARCH_BOARD_AEROCORE) \
+	|| defined(CONFIG_ARCH_BOARD_MINDPX_V2)
 	fprintf(stderr, "  mode_gpio, mode_pwm, mode_pwm4, test, sensor_reset [milliseconds], i2c <bus> <hz>\n");
 #endif
 	exit(1);

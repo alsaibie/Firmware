@@ -77,10 +77,6 @@
 #include <systemlib/mixer/mixer.h>
 
 #include <uORB/topics/actuator_controls.h>
-#include <uORB/topics/actuator_controls_0.h>
-#include <uORB/topics/actuator_controls_1.h>
-#include <uORB/topics/actuator_controls_2.h>
-#include <uORB/topics/actuator_controls_3.h>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/actuator_outputs.h>
 
@@ -256,7 +252,7 @@ PWMSim::init()
 	_task = px4_task_spawn_cmd("pwm_out_sim",
 				   SCHED_DEFAULT,
 				   SCHED_PRIORITY_DEFAULT,
-				   1000,
+				   1200,
 				   (px4_main_t)&PWMSim::task_main_trampoline,
 				   nullptr);
 
@@ -383,8 +379,7 @@ PWMSim::task_main()
 	_armed_sub = orb_subscribe(ORB_ID(actuator_armed));
 
 	/* advertise the mixed control outputs */
-	actuator_outputs_s outputs;
-	memset(&outputs, 0, sizeof(outputs));
+	actuator_outputs_s outputs = {};
 
 	/* advertise the mixed control outputs, insist on the first group output */
 	_outputs_pub = orb_advertise(ORB_ID(actuator_outputs), &outputs);
@@ -483,7 +478,6 @@ PWMSim::task_main()
 			}
 
 			/* do mixing */
-			actuator_outputs_s outputs = {};
 			num_outputs = _mixers->mix(&outputs.output[0], num_outputs, NULL);
 			outputs.noutputs = num_outputs;
 			outputs.timestamp = hrt_absolute_time();

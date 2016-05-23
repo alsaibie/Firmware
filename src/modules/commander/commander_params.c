@@ -93,103 +93,13 @@ PARAM_DEFINE_FLOAT(TRIM_PITCH, 0.0f);
 PARAM_DEFINE_FLOAT(TRIM_YAW, 0.0f);
 
 /**
- * Empty cell voltage.
- *
- * Defines the voltage where a single cell of the battery is considered empty.
- *
- * @group Battery Calibration
- * @unit V
- * @decimal 2
- * @increment 0.01
- */
-PARAM_DEFINE_FLOAT(BAT_V_EMPTY, 3.4f);
-
-/**
- * Full cell voltage.
- *
- * Defines the voltage where a single cell of the battery is considered full.
- *
- * @group Battery Calibration
- * @unit V
- * @decimal 2
- * @increment 0.01
- */
-PARAM_DEFINE_FLOAT(BAT_V_CHARGED, 4.2f);
-
-/**
- * Voltage drop per cell on 100% load
- *
- * This implicitely defines the internal resistance
- * to maximum current ratio and assumes linearity.
- *
- * @group Battery Calibration
- * @unit V
- * @min 0.0
- * @max 1.5
- * @decimal 2
- * @increment 0.01
- */
-PARAM_DEFINE_FLOAT(BAT_V_LOAD_DROP, 0.07f);
-
-/**
- * Number of cells.
- *
- * Defines the number of cells the attached battery consists of.
- *
- * @group Battery Calibration
- * @unit enum
- * @min 2
- * @max 10
- * @value 2 2S Battery
- * @value 3 3S Battery
- * @value 4 4S Battery
- * @value 5 5S Battery
- * @value 6 6S Battery
- * @value 7 7S Battery
- * @value 8 8S Battery
- * @value 9 9S Battery
- * @value 10 10S Battery
- * @value 11 11S Battery
- * @value 12 12S Battery
- * @value 13 13S Battery
- * @value 14 14S Battery
- * @value 15 15S Battery
- * @value 16 16S Battery
- */
-PARAM_DEFINE_INT32(BAT_N_CELLS, 3);
-
-/**
- * Battery capacity.
- *
- * Defines the capacity of the attached battery.
- *
- * @group Battery Calibration
- * @unit mA
- * @decimal 0
- * @min -1.0
- * @max 100000
- * @increment 50
- */
-PARAM_DEFINE_FLOAT(BAT_CAPACITY, -1.0f);
-
-/**
- * Datalink loss failsafe.
- *
- * Set to 1 to enable actions triggered when the datalink is lost.
- *
- * @group Commander
- * @unit boolean
- */
-PARAM_DEFINE_INT32(COM_DL_LOSS_EN, 0);
-
-/**
  * Datalink loss time threshold
  *
  * After this amount of seconds without datalink the data link lost mode triggers
  *
  * @group Commander
  * @unit s
- * @min 0
+ * @min 5
  * @max 300
  * @decimal 1
  * @increment 0.5
@@ -205,7 +115,7 @@ PARAM_DEFINE_INT32(COM_DL_LOSS_T, 10);
  * @group Commander
  * @unit s
  * @min 0
- * @max 30
+ * @max 3
  * @decimal 1
  * @increment 0.5
  */
@@ -217,10 +127,11 @@ PARAM_DEFINE_INT32(COM_DL_REG_T, 0);
  * Engine failure triggers only above this throttle value
  *
  * @group Commander
+ * @unit norm
  * @min 0.0
  * @max 1.0
- * @decimal 1
- * @increment 0.05
+ * @decimal 2
+ * @increment 0.01
  */
 PARAM_DEFINE_FLOAT(COM_EF_THROT, 0.5f);
 
@@ -232,7 +143,7 @@ PARAM_DEFINE_FLOAT(COM_EF_THROT, 0.5f);
  * @group Commander
  * @min 0.0
  * @max 50.0
- * @unit A
+ * @unit A/%
  * @decimal 2
  * @increment 1
  */
@@ -303,7 +214,7 @@ PARAM_DEFINE_FLOAT(COM_HOME_V_T, 10.0f);
  * being sticky. Developers can default it to off.
  *
  * @group Commander
- * @unit boolean
+ * @boolean
  */
 PARAM_DEFINE_INT32(COM_AUTOS_PAR, 1);
 
@@ -316,7 +227,6 @@ PARAM_DEFINE_INT32(COM_AUTOS_PAR, 1);
  * of directly forwarding the manual input data.
  *
  * @group Commander
- * @unit enum
  * @min 0
  * @max 2
  * @value 0 RC Transmitter
@@ -324,6 +234,17 @@ PARAM_DEFINE_INT32(COM_AUTOS_PAR, 1);
  * @value 2 Virtual RC by Joystick
  */
 PARAM_DEFINE_INT32(COM_RC_IN_MODE, 0);
+
+/**
+ * RC input arm/disarm command duration
+ *
+ * The default value of 1000 requires the stick to be held in the arm or disarm position for 1 second.
+ *
+ * @group Commander
+ * @min 100
+ * @max 1500
+ */
+PARAM_DEFINE_INT32(COM_RC_ARM_HYST, 1000);
 
 /**
  * Time-out for auto disarm after landing
@@ -342,12 +263,25 @@ PARAM_DEFINE_INT32(COM_RC_IN_MODE, 0);
 PARAM_DEFINE_INT32(COM_DISARM_LAND, 0);
 
 /**
+ * Battery failsafe mode
+ *
+ * Action the system takes on low battery. Defaults to off
+ *
+ * @group Commander
+ * @value 0 Warning
+ * @value 1 Return to Land
+ * @value 2 Land at current position
+ * @decimal 0
+ * @increment 1
+ */
+PARAM_DEFINE_INT32(COM_LOW_BAT_ACT, 0);
+
+/**
  * First flightmode slot (1000-1160)
  *
  * If the main switch channel is in this range the
  * selected flight mode will be applied.
  *
- * @unit enum
  * @value -1 Unassigned
  * @value 0 Manual
  * @value 1 Altitude
@@ -361,6 +295,7 @@ PARAM_DEFINE_INT32(COM_DISARM_LAND, 0);
  * @value 7 Offboard
  * @value 8 Stabilized
  * @value 9 Rattitude
+ * @value 12 Follow Me
  */
 PARAM_DEFINE_INT32(COM_FLTMODE1, -1);
 
@@ -370,7 +305,6 @@ PARAM_DEFINE_INT32(COM_FLTMODE1, -1);
  * If the main switch channel is in this range the
  * selected flight mode will be applied.
  *
- * @unit enum
  * @value -1 Unassigned
  * @value 0 Manual
  * @value 1 Altitude
@@ -384,6 +318,7 @@ PARAM_DEFINE_INT32(COM_FLTMODE1, -1);
  * @value 7 Offboard
  * @value 8 Stabilized
  * @value 9 Rattitude
+ * @value 12 Follow Me
  */
 PARAM_DEFINE_INT32(COM_FLTMODE2, -1);
 
@@ -393,7 +328,6 @@ PARAM_DEFINE_INT32(COM_FLTMODE2, -1);
  * If the main switch channel is in this range the
  * selected flight mode will be applied.
  *
- * @unit enum
  * @value -1 Unassigned
  * @value 0 Manual
  * @value 1 Altitude
@@ -407,6 +341,7 @@ PARAM_DEFINE_INT32(COM_FLTMODE2, -1);
  * @value 7 Offboard
  * @value 8 Stabilized
  * @value 9 Rattitude
+ * @value 12 Follow Me
  */
 PARAM_DEFINE_INT32(COM_FLTMODE3, -1);
 
@@ -416,7 +351,6 @@ PARAM_DEFINE_INT32(COM_FLTMODE3, -1);
  * If the main switch channel is in this range the
  * selected flight mode will be applied.
  *
- * @unit enum
  * @value -1 Unassigned
  * @value 0 Manual
  * @value 1 Altitude
@@ -430,6 +364,7 @@ PARAM_DEFINE_INT32(COM_FLTMODE3, -1);
  * @value 7 Offboard
  * @value 8 Stabilized
  * @value 9 Rattitude
+ * @value 12 Follow Me
  */
 PARAM_DEFINE_INT32(COM_FLTMODE4, -1);
 
@@ -439,7 +374,6 @@ PARAM_DEFINE_INT32(COM_FLTMODE4, -1);
  * If the main switch channel is in this range the
  * selected flight mode will be applied.
  *
- * @unit enum
  * @value -1 Unassigned
  * @value 0 Manual
  * @value 1 Altitude
@@ -453,16 +387,16 @@ PARAM_DEFINE_INT32(COM_FLTMODE4, -1);
  * @value 7 Offboard
  * @value 8 Stabilized
  * @value 9 Rattitude
+ * @value 12 Follow Me
  */
 PARAM_DEFINE_INT32(COM_FLTMODE5, -1);
 
 /**
- * Sixt flightmode slot (1800-2000)
+ * Sixth flightmode slot (1800-2000)
  *
  * If the main switch channel is in this range the
  * selected flight mode will be applied.
  *
- * @unit enum
  * @value -1 Unassigned
  * @value 0 Manual
  * @value 1 Altitude
@@ -476,5 +410,6 @@ PARAM_DEFINE_INT32(COM_FLTMODE5, -1);
  * @value 7 Offboard
  * @value 8 Stabilized
  * @value 9 Rattitude
+ * @value 12 Follow Me
  */
 PARAM_DEFINE_INT32(COM_FLTMODE6, -1);

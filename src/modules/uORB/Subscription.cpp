@@ -62,6 +62,7 @@
 #include "topics/actuator_armed.h"
 #include "topics/att_pos_mocap.h"
 #include "topics/vision_position_estimate.h"
+#include "topics/control_state.h"
 
 #include <px4_defines.h>
 
@@ -126,6 +127,13 @@ Subscription<T>::Subscription(const struct orb_metadata *meta,
 }
 
 template <class T>
+Subscription<T>::Subscription(const Subscription &other) :
+	SubscriptionNode(other._meta, other._interval, other._instance, nullptr),
+	_data() // initialize data structure to zero
+{
+}
+
+template <class T>
 Subscription<T>::~Subscription()
 {
 }
@@ -134,6 +142,12 @@ template <class T>
 void Subscription<T>::update()
 {
 	SubscriptionBase::update((void *)(&_data));
+}
+
+template <class T>
+bool Subscription<T>::check_updated()
+{
+	return SubscriptionBase::updated();
 }
 
 template <class T>
@@ -164,5 +178,6 @@ template class __EXPORT Subscription<optical_flow_s>;
 template class __EXPORT Subscription<distance_sensor_s>;
 template class __EXPORT Subscription<att_pos_mocap_s>;
 template class __EXPORT Subscription<vision_position_estimate_s>;
+template class __EXPORT Subscription<control_state_s>;
 
 } // namespace uORB

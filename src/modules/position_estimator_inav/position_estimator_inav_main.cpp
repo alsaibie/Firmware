@@ -52,10 +52,6 @@
 #include <uORB/uORB.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/actuator_controls.h>
-#include <uORB/topics/actuator_controls_0.h>
-#include <uORB/topics/actuator_controls_1.h>
-#include <uORB/topics/actuator_controls_2.h>
-#include <uORB/topics/actuator_controls_3.h>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/sensor_combined.h>
 #include <uORB/topics/vehicle_attitude.h>
@@ -66,9 +62,9 @@
 #include <uORB/topics/att_pos_mocap.h>
 #include <uORB/topics/optical_flow.h>
 #include <uORB/topics/distance_sensor.h>
-#include <mavlink/mavlink_log.h>
 #include <poll.h>
 #include <systemlib/err.h>
+#include <systemlib/mavlink_log.h>
 #include <geo/geo.h>
 #include <systemlib/systemlib.h>
 #include <drivers/drv_hrt.h>
@@ -234,8 +230,7 @@ static void write_debug_log(const char *msg, float dt, float x_est[2], float y_e
  ****************************************************************************/
 int position_estimator_inav_thread_main(int argc, char *argv[])
 {
-	int mavlink_fd;
-	mavlink_fd = px4_open(MAVLINK_LOG_DEVICE, 0);
+	orb_advert_t mavlink_log_pub = nullptr;
 
 	float x_est[2] = { 0.0f, 0.0f };	// pos, vel
 	float y_est[2] = { 0.0f, 0.0f };	// pos, vel
@@ -411,7 +406,7 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 
 	/* wait for initial baro value */
 	bool wait_baro = true;
-	TerrainEstimator *terrain_estimator = new TerrainEstimator();
+	TerrainEstimator terrain_estimator;
 
 	thread_running = true;
 	hrt_abstime baro_wait_for_sample_time = hrt_absolute_time();
@@ -421,10 +416,10 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 
 		if (ret < 0) {
 			/* poll error */
-			mavlink_log_info(mavlink_fd, "[inav] poll error on init");
+			mavlink_log_info(&mavlink_log_pub, "[inav] poll error on init");
 		} else if (hrt_absolute_time() - baro_wait_for_sample_time > MAX_WAIT_FOR_BARO_SAMPLE) {
 			wait_baro = false;
-			mavlink_log_info(mavlink_fd, "[inav] timed out waiting for a baro sample");
+			mavlink_log_info(&mavlink_log_pub, "[inav] timed out waiting for a baro sample");
 		}
 		else if (ret > 0) {
 			if (fds_init[0].revents & POLLIN) {
@@ -466,7 +461,7 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 
 		if (ret < 0) {
 			/* poll error */
-			mavlink_log_info(mavlink_fd, "[inav] poll error on init");
+			mavlink_log_info(&mavlink_log_pub, "[inav] poll error on init");
 			continue;
 
 		} else if (ret > 0) {
@@ -549,9 +544,9 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 				orb_copy(ORB_ID(distance_sensor), distance_sensor_sub, &lidar);
 				lidar.current_distance += params.lidar_calibration_offset;
 			}
-			
+
 			if (updated) { //check if altitude estimation for lidar is enabled and new sensor data
-				
+
 				if (params.enable_lidar_alt_est && lidar.current_distance > lidar.min_distance && lidar.current_distance < lidar.max_distance
 			    		&& (PX4_R(att.R, 2, 2) > 0.7f)) {
 
@@ -567,7 +562,7 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 					if (lidar_first) {
 						lidar_first = false;
 						lidar_offset = dist_ground + z_est[0];
-						mavlink_log_info(mavlink_fd, "[inav] LIDAR: new ground offset");
+						mavlink_log_info(&mavlink_log_pub, "[inav] LIDAR: new ground offset");
 						warnx("[inav] LIDAR: new ground offset");
 					}
 
@@ -764,7 +759,7 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 						last_vision_z = vision.z;
 
 						warnx("VISION estimate valid");
-						mavlink_log_info(mavlink_fd, "[inav] VISION estimate valid");
+						mavlink_log_info(&mavlink_log_pub, "[inav] VISION estimate valid");
 					}
 
 					/* calculate correction for position */
@@ -818,7 +813,7 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 						mocap_valid = true;
 
 						warnx("MOCAP data valid");
-						mavlink_log_info(mavlink_fd, "[inav] MOCAP data valid");
+						mavlink_log_info(&mavlink_log_pub, "[inav] MOCAP data valid");
 					}
 
 					/* calculate correction for position */
@@ -842,7 +837,7 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 				if (gps_valid) {
 					if (gps.eph > max_eph_epv || gps.epv > max_eph_epv || gps.fix_type < 3) {
 						gps_valid = false;
-						mavlink_log_info(mavlink_fd, "[inav] GPS signal lost");
+						mavlink_log_info(&mavlink_log_pub, "[inav] GPS signal lost");
 						warnx("[inav] GPS signal lost");
 					}
 
@@ -850,7 +845,7 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 					if (gps.eph < max_eph_epv * 0.7f && gps.epv < max_eph_epv * 0.7f && gps.fix_type >= 3) {
 						gps_valid = true;
 						reset_est = true;
-						mavlink_log_info(mavlink_fd, "[inav] GPS signal found");
+						mavlink_log_info(&mavlink_log_pub, "[inav] GPS signal found");
 						warnx("[inav] GPS signal found");
 					}
 				}
@@ -883,7 +878,7 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 							map_projection_init(&ref, lat, lon);
 							// XXX replace this print
 							warnx("init ref: lat=%.7f, lon=%.7f, alt=%8.4f", (double)lat, (double)lon, (double)alt);
-							mavlink_log_info(mavlink_fd, "[inav] init ref: %.7f, %.7f, %8.4f", (double)lat, (double)lon, (double)alt);
+							mavlink_log_info(&mavlink_log_pub, "[inav] init ref: %.7f, %.7f, %8.4f", (double)lat, (double)lon, (double)alt);
 						}
 					}
 
@@ -945,35 +940,35 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 		if ((flow_valid || lidar_valid) && t > (flow_time + flow_topic_timeout)) {
 			flow_valid = false;
 			warnx("FLOW timeout");
-			mavlink_log_info(mavlink_fd, "[inav] FLOW timeout");
+			mavlink_log_info(&mavlink_log_pub, "[inav] FLOW timeout");
 		}
 
 		/* check for timeout on GPS topic */
 		if (gps_valid && (t > (gps.timestamp_position + gps_topic_timeout))) {
 			gps_valid = false;
 			warnx("GPS timeout");
-			mavlink_log_info(mavlink_fd, "[inav] GPS timeout");
+			mavlink_log_info(&mavlink_log_pub, "[inav] GPS timeout");
 		}
 
 		/* check for timeout on vision topic */
 		if (vision_valid && (t > (vision.timestamp_boot + vision_topic_timeout))) {
 			vision_valid = false;
 			warnx("VISION timeout");
-			mavlink_log_info(mavlink_fd, "[inav] VISION timeout");
+			mavlink_log_info(&mavlink_log_pub, "[inav] VISION timeout");
 		}
 
 		/* check for timeout on mocap topic */
 		if (mocap_valid && (t > (mocap.timestamp_boot + mocap_topic_timeout))) {
 			mocap_valid = false;
 			warnx("MOCAP timeout");
-			mavlink_log_info(mavlink_fd, "[inav] MOCAP timeout");
+			mavlink_log_info(&mavlink_log_pub, "[inav] MOCAP timeout");
 		}
 
 		/* check for lidar measurement timeout */
 		if (lidar_valid && (t > (lidar_time + lidar_timeout))) {
 			lidar_valid = false;
 			warnx("LIDAR timeout");
-			mavlink_log_info(mavlink_fd, "[inav] LIDAR timeout");
+			mavlink_log_info(&mavlink_log_pub, "[inav] LIDAR timeout");
 		}
 
 		float dt = t_prev > 0 ? (t - t_prev) / 1000000.0f : 0.0f;
@@ -1265,8 +1260,8 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 		}
 
 		/* run terrain estimator */
-		terrain_estimator->predict(dt, &att, &sensor, &lidar);
-		terrain_estimator->measurement_update(hrt_absolute_time(), &gps, &lidar, &att);
+		terrain_estimator.predict(dt, &att, &sensor, &lidar);
+		terrain_estimator.measurement_update(hrt_absolute_time(), &gps, &lidar, &att);
 
 		if (inav_verbose_mode) {
 			/* print updates rate */
@@ -1359,8 +1354,8 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 				global_pos.eph = eph;
 				global_pos.epv = epv;
 
-				if (terrain_estimator->is_valid()) {
-					global_pos.terrain_alt = global_pos.alt - terrain_estimator->get_distance_to_ground();
+				if (terrain_estimator.is_valid()) {
+					global_pos.terrain_alt = global_pos.alt - terrain_estimator.get_distance_to_ground();
 					global_pos.terrain_alt_valid = true;
 
 				} else {
@@ -1380,7 +1375,7 @@ int position_estimator_inav_thread_main(int argc, char *argv[])
 	}
 
 	warnx("stopped");
-	mavlink_log_info(mavlink_fd, "[inav] stopped");
+	mavlink_log_info(&mavlink_log_pub, "[inav] stopped");
 	thread_running = false;
 	return 0;
 }

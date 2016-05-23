@@ -94,10 +94,10 @@ PARAM_DEFINE_FLOAT(ATT_W_GYRO_BIAS, 0.1f);
 PARAM_DEFINE_FLOAT(ATT_MAG_DECL, 0.0f);
 
 /**
- * Enable automatic GPS based declination compensation
+ * Automatic GPS based declination compensation
  *
  * @group Attitude Q estimator
- * @unit boolean
+ * @boolean
  */
 PARAM_DEFINE_INT32(ATT_MAG_DECL_A, 1);
 
@@ -107,21 +107,20 @@ PARAM_DEFINE_INT32(ATT_MAG_DECL_A, 1);
  * Set to 2 to use heading from motion capture.
  *
  * @group Attitude Q estimator
- * @unit enum
- * @value 0 none
- * @value 1 vision
- * @value 2 motion capture
+ * @value 0 None
+ * @value 1 Vision
+ * @value 2 Motion Capture
  * @min 0
  * @max 2
  */
 PARAM_DEFINE_INT32(ATT_EXT_HDG_M, 0);
 
 /**
- * Enable acceleration compensation based on GPS
+ * Acceleration compensation based on GPS
  * velocity.
  *
  * @group Attitude Q estimator
- * @unit boolean
+ * @boolean
  */
 PARAM_DEFINE_INT32(ATT_ACC_COMP, 1);
 
