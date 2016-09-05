@@ -44,6 +44,11 @@ set(config_module_list
 	drivers/pwm_input
 	drivers/camera_trigger
 	drivers/bst
+	drivers/snapdragon_rc_pwm
+	drivers/lis3mdl
+	drivers/bmp280
+	drivers/bma180
+	drivers/bmi160
 
 	#
 	# System commands
@@ -62,12 +67,14 @@ set(config_module_list
 	systemcmds/mtd
 	systemcmds/dumpfile
 	systemcmds/ver
+	systemcmds/sd_bench
 	systemcmds/tests
 
 	#
 	# General system control
 	#
 	modules/commander
+	modules/load_mon
 	modules/navigator
 	modules/mavlink
 	modules/gpio_led
@@ -77,30 +84,29 @@ set(config_module_list
 	#
 	# Estimation modules (EKF/ SO3 / other filters)
 	#
-	# Too high RAM usage due to static allocations
-	# modules/attitude_estimator_ekf
 	modules/attitude_estimator_q
 	modules/ekf_att_pos_estimator
 	modules/position_estimator_inav
 	modules/ekf2
+	modules/local_position_estimator
 
 	#
 	# Vehicle Control
 	#
 	# modules/segway # XXX Needs GCC 4.7 fix
-	#modules/fw_pos_control_l1
-	#modules/fw_att_control
-	#modules/mc_att_control
-	#modules/mc_pos_control
+	modules/fw_pos_control_l1
+	modules/fw_att_control
+	modules/mc_att_control
+	modules/mc_pos_control
+	modules/vtol_att_control
 	modules/dp_att_control
 	modules/dp_pos_control
-	#modules/vtol_att_control
-	
 
 	#
 	# Logging
 	#
 	modules/sdlog2
+	modules/logger
 
 	#
 	# Library modules
@@ -108,14 +114,13 @@ set(config_module_list
 	modules/param
 	modules/systemlib
 	modules/systemlib/mixer
-	modules/controllib
 	modules/uORB
 	modules/dataman
 
 	#
 	# Libraries
 	#
-	#lib/mathlib/CMSIS
+	lib/controllib
 	lib/mathlib
 	lib/mathlib/math/filter
 	lib/rc
@@ -128,8 +133,9 @@ set(config_module_list
 	lib/terrain_estimation
 	lib/runway_takeoff
 	lib/tailsitter_recovery
+	lib/DriverFramework/framework
 	platforms/nuttx
-
+	
 	# had to add for cmake, not sure why wasn't in original config
 	platforms/common
 	platforms/nuttx/px4_layer
@@ -166,6 +172,11 @@ set(config_module_list
 
 	# Hardware test
 	#examples/hwtest
+
+	#
+	# Debug App
+	#
+	examples/px4_dolphin_mavlink_debug
 )
 
 set(config_extra_builtin_cmds
@@ -174,19 +185,21 @@ set(config_extra_builtin_cmds
 	)
 
 set(config_extra_libs
-	${CMAKE_SOURCE_DIR}/src/lib/mathlib/CMSIS/libarm_cortexM4lf_math.a
 	uavcan
 	uavcan_stm32_driver
 	)
 
 set(config_io_extra_libs
-	#${CMAKE_SOURCE_DIR}/src/lib/mathlib/CMSIS/libarm_cortexM3l_math.a
 	)
 
 add_custom_target(sercon)
 set_target_properties(sercon PROPERTIES
-	MAIN "sercon" STACK "2048")
+	PRIORITY "SCHED_PRIORITY_DEFAULT"
+	MAIN "sercon"
+	STACK_MAIN "2048")
 
 add_custom_target(serdis)
 set_target_properties(serdis PROPERTIES
-	MAIN "serdis" STACK "2048")
+	PRIORITY "SCHED_PRIORITY_DEFAULT"
+	MAIN "serdis"
+	STACK_MAIN "2048")

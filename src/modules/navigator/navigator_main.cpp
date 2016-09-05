@@ -858,6 +858,7 @@ Navigator::publish_att_sp()
 		/* publish att sp*/
 		orb_publish(ORB_ID(vehicle_attitude_setpoint), _att_sp_pub, &_att_sp);
 
+
 	} else {
 		/* advertise and publish */
 		_att_sp_pub = orb_advertise(ORB_ID(vehicle_attitude_setpoint), &_att_sp);

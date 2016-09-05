@@ -1805,7 +1805,6 @@ protected:
 
 		if (_act_sub->update(&_act_time, &act)) {
 			mavlink_servo_output_raw_t msg;
-
 			msg.time_usec = act.timestamp;
 			msg.port = N;
 			msg.servo1_raw = act.output[0];

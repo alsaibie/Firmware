@@ -1260,6 +1260,7 @@ FixedwingAttitudeControl::task_main()
 			_actuators_airframe.timestamp = hrt_absolute_time();
 			_actuators_airframe.timestamp_sample = _ctrl_state.timestamp;
 
+
 			/* Only publish if any of the proper modes are enabled */
 			if (_vcontrol_mode.flag_control_rates_enabled ||
 			    _vcontrol_mode.flag_control_attitude_enabled ||
@@ -1267,7 +1268,6 @@ FixedwingAttitudeControl::task_main()
 				/* publish the actuator controls */
 				if (_actuators_0_pub != nullptr) {
 					orb_publish(_actuators_id, _actuators_0_pub, &_actuators);
-
 				} else if (_actuators_id) {
 					_actuators_0_pub = orb_advertise(_actuators_id, &_actuators);
 				}

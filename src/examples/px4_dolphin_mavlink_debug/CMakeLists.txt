@@ -1,6 +1,6 @@
 ############################################################################
 #
-#   Copyright (c) 2016 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2015 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -31,11 +31,11 @@
 #
 ############################################################################
 px4_add_module(
-	MODULE modules__dp_pos_control
-	MAIN dp_pos_control
-	STACK_MAIN 1200
+	MODULE examples__px4_dolphin_mavlink_debug
+	MAIN px4_dolphin_mavlink_debug
+	STACK_MAIN 2000
 	SRCS
-		dp_pos_control_main.cpp
+		px4_dolphin_mavlink_debug.c
 	DEPENDS
 		platforms__common
 	)

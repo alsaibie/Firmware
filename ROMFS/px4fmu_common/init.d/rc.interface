@@ -10,7 +10,6 @@ then
 	#
 	# Load main mixer
 	#
-
 	if [ $MIXER_AUX == none -a $USE_IO == yes ]
 	then
 		set MIXER_AUX $MIXER.aux
@@ -64,6 +63,7 @@ fi
 
 if [ $OUTPUT_MODE == fmu -o $OUTPUT_MODE == io ]
 then
+
 	if [ $PWM_OUT != none ]
 	then
 		#
@@ -77,6 +77,7 @@ then
 		#
 		# Set disarmed, min and max PWM values
 		#
+
 		if [ $PWM_DISARMED != none ]
 		then
 			pwm disarmed -c $PWM_OUT -p $PWM_DISARMED

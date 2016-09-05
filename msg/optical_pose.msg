@@ -1,7 +1,6 @@
 # Optical pose in NED body frame in SI units.
 # @see http://en.wikipedia.org/wiki/International_System_of_Units
  
-uint64 timestamp		# in microseconds since system start
 uint8 sensor_id			# id of the sensor emitting the pose value
 float32 Q1	# Quaternion 1 of Pose
 float32 Q2	# Quaternion 2 of Pose

@@ -1256,7 +1256,6 @@ MavlinkReceiver::handle_message_manual_control(mavlink_message_t *msg)
 		struct rc_input_values rc = {};
 		rc.timestamp_publication = hrt_absolute_time();
 		rc.timestamp_last_signal = rc.timestamp_publication;
-
 		rc.channel_count = 8;
 		rc.rc_failsafe = false;
 		rc.rc_lost = false;

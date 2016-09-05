@@ -780,7 +780,6 @@ PX4FMU::publish_pwm_outputs(uint16_t *values, size_t numvalues)
 	actuator_outputs_s outputs = {};
 	outputs.noutputs = numvalues;
 	outputs.timestamp = hrt_absolute_time();
-
 	for (size_t i = 0; i < _max_actuators; ++i) {
 		outputs.output[i] = i < numvalues ? (float)values[i] : 0;
 	}
@@ -790,6 +789,7 @@ PX4FMU::publish_pwm_outputs(uint16_t *values, size_t numvalues)
 		_outputs_pub = orb_advertise_multi(ORB_ID(actuator_outputs), &outputs, &instance, ORB_PRIO_DEFAULT);
 
 	} else {
+
 		orb_publish(ORB_ID(actuator_outputs), _outputs_pub, &outputs);
 	}
 }
@@ -1042,6 +1042,7 @@ PX4FMU::cycle()
 			}
 		}
 
+
 		/* can we mix? */
 		if (_mixers != nullptr) {
 
@@ -1096,6 +1097,7 @@ PX4FMU::cycle()
 			if (_armed.lockdown) {
 				for (size_t i = 0; i < num_outputs; i++) {
 					pwm_limited[i] = _disarmed_pwm[i];
+					warnx("Limiting PWM");
 				}
 			}
 

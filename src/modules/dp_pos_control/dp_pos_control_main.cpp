@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2013 - 2015 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013 - 2016 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -79,11 +79,12 @@
 #include <uORB/topics/position_setpoint_triplet.h>
 #include <uORB/topics/vehicle_global_velocity_setpoint.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
+#include <uORB/topics/vehicle_land_detected.h>
 
 #include <systemlib/systemlib.h>
+#include <systemlib/mavlink_log.h>
 #include <mathlib/mathlib.h>
 #include <lib/geo/geo.h>
-#include <mavlink/mavlink_log.h>
 #include <platforms/px4_defines.h>
 
 #include <controllib/blocks.hpp>
@@ -125,9 +126,10 @@ public:
 private:
 	bool		_task_should_exit;		/**< if true, task should exit */
 	int		_control_task;			/**< task handle for task */
-	int		_mavlink_fd;			/**< mavlink fd */
+	orb_advert_t	_mavlink_log_pub;		/**< mavlink log advert */
 
 	int		_vehicle_status_sub;		/**< vehicle status subscription */
+	int		_vehicle_land_detected_sub;	/**< vehicle land detected subscription */
 	int		_ctrl_state_sub;		/**< control state subscription */
 	int		_att_sp_sub;			/**< vehicle attitude setpoint */
 	int		_control_mode_sub;		/**< vehicle control mode subscription */
@@ -146,7 +148,8 @@ private:
 	orb_id_t _attitude_setpoint_id;
 
 	struct vehicle_status_s 			_vehicle_status; 	/**< vehicle status */
-	struct control_state_s				_ctrl_state;			/**< vehicle attitude */
+	struct vehicle_land_detected_s 			_vehicle_land_detected;	/**< vehicle land detected */
+	struct control_state_s				_ctrl_state;		/**< vehicle attitude */
 	struct vehicle_attitude_setpoint_s		_att_sp;		/**< vehicle attitude setpoint */
 	struct manual_control_setpoint_s		_manual;		/**< r/c channel data */
 	struct vehicle_control_mode_s			_control_mode;		/**< vehicle control mode */
@@ -173,7 +176,8 @@ private:
 		param_t z_vel_p;
 		param_t z_vel_i;
 		param_t z_vel_d;
-		param_t z_vel_max;
+		param_t z_vel_max_up;
+		param_t z_vel_max_down;
 		param_t z_ff;
 		param_t xy_p;
 		param_t xy_vel_p;
@@ -195,6 +199,7 @@ private:
 		param_t hold_max_xy;
 		param_t hold_max_z;
 		param_t acc_hor_max;
+		param_t alt_mode;
 
 	}		_params_handles;		/**< handles for interesting parameters */
 
@@ -217,6 +222,9 @@ private:
 		float hold_max_xy;
 		float hold_max_z;
 		float acc_hor_max;
+		float vel_max_up;
+		float vel_max_down;
+		uint32_t alt_mode;
 
 		math::Vector<3> pos_p;
 		math::Vector<3> vel_p;
@@ -340,7 +348,7 @@ private:
 	void		task_main();
 };
 
-namespace pos_control
+namespace dp_pos_control
 {
 
 DolphinPositionControl	*g_control;
@@ -350,7 +358,7 @@ DolphinPositionControl::DolphinPositionControl() :
 	SuperBlock(NULL, "DPC"),
 	_task_should_exit(false),
 	_control_task(-1),
-	_mavlink_fd(-1),
+	_mavlink_log_pub(nullptr),
 
 	/* subscriptions */
 	_ctrl_state_sub(-1),
@@ -368,6 +376,17 @@ DolphinPositionControl::DolphinPositionControl() :
 	_local_pos_sp_pub(nullptr),
 	_global_vel_sp_pub(nullptr),
 	_attitude_setpoint_id(0),
+	_vehicle_status{},
+	_vehicle_land_detected{},
+	_ctrl_state{},
+	_att_sp{},
+	_manual{},
+	_control_mode{},
+	_arming{},
+	_local_pos{},
+	_pos_sp_triplet{},
+	_local_pos_sp{},
+	_global_vel_sp{},
 	_manual_thr_min(this, "MANTHR_MIN"),
 	_manual_thr_max(this, "MANTHR_MAX"),
 	_vel_x_deriv(this, "VELD"),
@@ -392,17 +411,8 @@ DolphinPositionControl::DolphinPositionControl() :
 	_takeoff_thrust_sp(0.0f),
 	control_vel_enabled_prev(false)
 {
-	memset(&_vehicle_status, 0, sizeof(_vehicle_status));
-	memset(&_ctrl_state, 0, sizeof(_ctrl_state));
+	// Make the quaternion valid for control state
 	_ctrl_state.q[0] = 1.0f;
-	memset(&_att_sp, 0, sizeof(_att_sp));
-	memset(&_manual, 0, sizeof(_manual));
-	memset(&_control_mode, 0, sizeof(_control_mode));
-	memset(&_arming, 0, sizeof(_arming));
-	memset(&_local_pos, 0, sizeof(_local_pos));
-	memset(&_pos_sp_triplet, 0, sizeof(_pos_sp_triplet));
-	memset(&_local_pos_sp, 0, sizeof(_local_pos_sp));
-	memset(&_global_vel_sp, 0, sizeof(_global_vel_sp));
 
 	memset(&_ref_pos, 0, sizeof(_ref_pos));
 
@@ -435,7 +445,16 @@ DolphinPositionControl::DolphinPositionControl() :
 	_params_handles.z_vel_p		= param_find("DPC_Z_VEL_P");
 	_params_handles.z_vel_i		= param_find("DPC_Z_VEL_I");
 	_params_handles.z_vel_d		= param_find("DPC_Z_VEL_D");
-	_params_handles.z_vel_max	= param_find("DPC_Z_VEL_MAX");
+	_params_handles.z_vel_max_up	= param_find("DPC_Z_VEL_MAX_UP");
+	_params_handles.z_vel_max_down	= param_find("DPC_Z_VEL_MAX");
+
+	// transitional support: Copy param values from max to down
+	// param so that max param can be renamed in 1-2 releases
+	// (currently at 1.3.0)
+	float p;
+	param_get(param_find("DPC_Z_VEL_MAX"), &p);
+	param_set(param_find("DPC_Z_VEL_MAX_DN"), &p);
+
 	_params_handles.z_ff		= param_find("DPC_Z_FF");
 	_params_handles.xy_p		= param_find("DPC_XY_P");
 	_params_handles.xy_vel_p	= param_find("DPC_XY_VEL_P");
@@ -457,6 +476,7 @@ DolphinPositionControl::DolphinPositionControl() :
 	_params_handles.hold_max_xy = param_find("DPC_HOLD_MAX_XY");
 	_params_handles.hold_max_z = param_find("DPC_HOLD_MAX_Z");
 	_params_handles.acc_hor_max = param_find("DPC_ACC_HOR_MAX");
+	_params_handles.alt_mode = param_find("DPC_ALT_MODE");
 
 	/* fetch initial parameter values */
 	parameters_update(true);
@@ -483,7 +503,7 @@ DolphinPositionControl::~DolphinPositionControl()
 		} while (_control_task != -1);
 	}
 
-	pos_control::g_control = nullptr;
+	dp_pos_control::g_control = nullptr;
 }
 
 int
@@ -516,6 +536,7 @@ DolphinPositionControl::parameters_update(bool force)
 		_params.tilt_max_land = math::radians(_params.tilt_max_land);
 
 		float v;
+		uint32_t v_i;
 		param_get(_params_handles.xy_p, &v);
 		_params.pos_p(0) = v;
 		_params.pos_p(1) = v;
@@ -539,13 +560,16 @@ DolphinPositionControl::parameters_update(bool force)
 		param_get(_params_handles.xy_vel_max, &v);
 		_params.vel_max(0) = v;
 		_params.vel_max(1) = v;
-		param_get(_params_handles.z_vel_max, &v);
+		param_get(_params_handles.z_vel_max_up, &v);
+		_params.vel_max_up = v;
 		_params.vel_max(2) = v;
+		param_get(_params_handles.z_vel_max_down, &v);
+		_params.vel_max_down = v;
 		param_get(_params_handles.xy_vel_cruise, &v);
 		_params.vel_cruise(0) = v;
 		_params.vel_cruise(1) = v;
-		/* using Z max for now */
-		param_get(_params_handles.z_vel_max, &v);
+		/* using Z max up for now */
+		param_get(_params_handles.z_vel_max_up, &v);
 		_params.vel_cruise(2) = v;
 		param_get(_params_handles.xy_ff, &v);
 		v = math::constrain(v, 0.0f, 1.0f);
@@ -563,6 +587,8 @@ DolphinPositionControl::parameters_update(bool force)
 		_params.hold_max_z = (v < 0.0f ? 0.0f : v);
 		param_get(_params_handles.acc_hor_max, &v);
 		_params.acc_hor_max = v;
+		param_get(_params_handles.alt_mode, &v_i);
+		_params.alt_mode = v_i;
 
 		_params.sp_offs_max = _params.vel_cruise.edivide(_params.pos_p) * 2.0f;
 
@@ -581,8 +607,8 @@ DolphinPositionControl::parameters_update(bool force)
 		_params.dp_att_yaw_p = v;
 
 		/* takeoff and land velocities should not exceed maximum */
-		_params.tko_speed = fminf(_params.tko_speed, _params.vel_max(2));
-		_params.land_speed = fminf(_params.land_speed, _params.vel_max(2));
+		_params.tko_speed = fminf(_params.tko_speed, _params.vel_max_up);
+		_params.land_speed = fminf(_params.land_speed, _params.vel_max_down);
 	}
 
 	return OK;
@@ -607,6 +633,12 @@ DolphinPositionControl::poll_subscriptions()
 				_attitude_setpoint_id = ORB_ID(vehicle_attitude_setpoint);
 			}
 		}
+	}
+
+	orb_check(_vehicle_land_detected_sub, &updated);
+
+	if (updated) {
+		orb_copy(ORB_ID(vehicle_land_detected), _vehicle_land_detected_sub, &_vehicle_land_detected);
 	}
 
 	orb_check(_ctrl_state_sub, &updated);
@@ -683,7 +715,7 @@ DolphinPositionControl::throttle_curve(float ctl, float ctr)
 void
 DolphinPositionControl::task_main_trampoline(int argc, char *argv[])
 {
-	pos_control::g_control->task_main();
+	dp_pos_control::g_control->task_main();
 }
 
 void
@@ -1025,7 +1057,10 @@ void DolphinPositionControl::control_auto(float dt)
 		/* by default use current setpoint as is */
 		math::Vector<3> pos_sp_s = curr_sp_s;
 
-		if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_POSITION && previous_setpoint_valid) {
+		if ((_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_POSITION  ||
+		     _pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET) &&
+		      previous_setpoint_valid) {
+
 			/* follow "previous - current" line */
 
 			if ((curr_sp - prev_sp).length() > MIN_DIST) {
@@ -1116,7 +1151,10 @@ void DolphinPositionControl::control_auto(float dt)
 		_pos_sp = pos_sp_s.edivide(scale);
 
 		/* update yaw setpoint if needed */
-		if (PX4_ISFINITE(_pos_sp_triplet.current.yaw)) {
+
+		if (_pos_sp_triplet.current.yawspeed_valid && _pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET) {
+			_att_sp.yaw_body = _att_sp.yaw_body + _pos_sp_triplet.current.yawspeed * dt;
+		} else if (PX4_ISFINITE(_pos_sp_triplet.current.yaw)) {
 			_att_sp.yaw_body = _pos_sp_triplet.current.yaw;
 		}
 
@@ -1148,12 +1186,11 @@ void
 DolphinPositionControl::task_main()
 {
 
-	_mavlink_fd = px4_open(MAVLINK_LOG_DEVICE, 0);
-
 	/*
 	 * do subscriptions
 	 */
 	_vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
+	_vehicle_land_detected_sub = orb_subscribe(ORB_ID(vehicle_land_detected));
 	_ctrl_state_sub = orb_subscribe(ORB_ID(control_state));
 	_att_sp_sub = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));
 	_control_mode_sub = orb_subscribe(ORB_ID(vehicle_control_mode));
@@ -1255,7 +1292,11 @@ DolphinPositionControl::task_main()
 
 				_pos(0) = _local_pos.x;
 				_pos(1) = _local_pos.y;
-				_pos(2) = _local_pos.z;
+				if (_params.alt_mode == 1 && _local_pos.dist_bottom_valid) {
+					_pos(2) = -_local_pos.dist_bottom;
+				} else {
+					_pos(2) = _local_pos.z;
+				}
 			}
 
 			if (PX4_ISFINITE(_local_pos.vx) &&
@@ -1264,7 +1305,11 @@ DolphinPositionControl::task_main()
 
 				_vel(0) = _local_pos.vx;
 				_vel(1) = _local_pos.vy;
-				_vel(2) = _local_pos.vz;
+				if (_params.alt_mode == 1 && _local_pos.dist_bottom_valid) {
+					_vel(2) = -_local_pos.dist_bottom_rate;
+				} else {
+					_vel(2) = _local_pos.vz;
+				}
 			}
 
 			_vel_err_d(0) = _vel_x_deriv.update(-_vel(0));
@@ -1285,7 +1330,8 @@ DolphinPositionControl::task_main()
 		if (_control_mode.flag_control_altitude_enabled ||
 				_control_mode.flag_control_position_enabled ||
 				_control_mode.flag_control_climb_rate_enabled ||
-				_control_mode.flag_control_velocity_enabled) {
+				_control_mode.flag_control_velocity_enabled ||
+				_control_mode.flag_control_acceleration_enabled) {
 
 			_vel_ff.zero();
 
@@ -1342,7 +1388,7 @@ DolphinPositionControl::task_main()
 				}
 
 			} else if (_control_mode.flag_control_manual_enabled
-					&& _vehicle_status.condition_landed) {
+					&& _vehicle_land_detected.landed) {
 				/* don't run controller when landed */
 				_reset_pos_sp = true;
 				_reset_alt_sp = true;
@@ -1376,6 +1422,45 @@ DolphinPositionControl::task_main()
 					_vel_sp(1) = (_pos_sp(1) - _pos(1)) * _params.pos_p(1);
 				}
 
+				// guard against any bad velocity values
+
+				bool velocity_valid = PX4_ISFINITE(_pos_sp_triplet.current.vx) &&
+									  PX4_ISFINITE(_pos_sp_triplet.current.vy) &&
+									  _pos_sp_triplet.current.velocity_valid;
+
+				// do not go slower than the follow target velocity when position tracking is active (set to valid)
+
+				if(_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET &&
+					velocity_valid &&
+					_pos_sp_triplet.current.position_valid) {
+
+					math::Vector<3> ft_vel(_pos_sp_triplet.current.vx, _pos_sp_triplet.current.vy, 0);
+
+					float cos_ratio = (ft_vel*_vel_sp)/(ft_vel.length()*_vel_sp.length());
+
+					// only override velocity set points when uav is traveling in same direction as target and vector component
+					// is greater than calculated position set point velocity component
+
+					if(cos_ratio > 0) {
+						ft_vel *= (cos_ratio);
+						// min speed a little faster than target vel
+						ft_vel += ft_vel.normalized()*1.5f;
+					} else {
+						ft_vel.zero();
+					}
+
+					_vel_sp(0) = fabs(ft_vel(0)) > fabs(_vel_sp(0)) ? ft_vel(0) : _vel_sp(0);
+					_vel_sp(1) = fabs(ft_vel(1)) > fabs(_vel_sp(1)) ? ft_vel(1) : _vel_sp(1);
+
+					// track target using velocity only
+
+				} else if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_FOLLOW_TARGET &&
+						velocity_valid) {
+
+					_vel_sp(0) = _pos_sp_triplet.current.vx;
+					_vel_sp(1) = _pos_sp_triplet.current.vy;
+				}
+
 				if (_run_alt_control) {
 					_vel_sp(2) = (_pos_sp(2) - _pos(2)) * _params.pos_p(2);
 				}
@@ -1391,10 +1476,11 @@ DolphinPositionControl::task_main()
 				}
 
 				/* make sure velocity setpoint is saturated in z*/
-				float vel_norm_z = sqrtf(_vel_sp(2) * _vel_sp(2));
-
-				if (vel_norm_z > _params.vel_max(2)) {
-					_vel_sp(2) = _vel_sp(2) * _params.vel_max(2) / vel_norm_z;
+				if (_vel_sp(2) < -1.0f * _params.vel_max_up){
+					_vel_sp(2) = -1.0f * _params.vel_max_up;
+				}
+				if (_vel_sp(2) >  _params.vel_max_down) {
+					_vel_sp(2) = _params.vel_max_down;
 				}
 
 				if (!_control_mode.flag_control_position_enabled) {
@@ -1430,7 +1516,7 @@ DolphinPositionControl::task_main()
 
 					// check if we are not already in air.
 					// if yes then we don't need a jumped takeoff anymore
-					if (!_takeoff_jumped && !_vehicle_status.condition_landed && fabsf(_takeoff_thrust_sp) < FLT_EPSILON) {
+					if (!_takeoff_jumped && !_vehicle_land_detected.landed && fabsf(_takeoff_thrust_sp) < FLT_EPSILON) {
 						_takeoff_jumped = true;
 					}
 
@@ -1460,8 +1546,6 @@ DolphinPositionControl::task_main()
 					_takeoff_jumped = false;
 					_takeoff_thrust_sp = 0.0f;
 				}
-
-
 
 				// limit total horizontal acceleration
 				math::Vector<2> acc_hor;
@@ -1499,7 +1583,8 @@ DolphinPositionControl::task_main()
 					_global_vel_sp_pub = orb_advertise(ORB_ID(vehicle_global_velocity_setpoint), &_global_vel_sp);
 				}
 
-				if (_control_mode.flag_control_climb_rate_enabled || _control_mode.flag_control_velocity_enabled) {
+				if (_control_mode.flag_control_climb_rate_enabled || _control_mode.flag_control_velocity_enabled ||
+				    _control_mode.flag_control_acceleration_enabled) {
 					/* reset integrals if needed */
 					if (_control_mode.flag_control_climb_rate_enabled) {
 						if (reset_int_z) {
@@ -1557,7 +1642,12 @@ DolphinPositionControl::task_main()
 					}
 
 					/* thrust vector in NED frame */
-					math::Vector<3> thrust_sp = vel_err.emult(_params.vel_p) + _vel_err_d.emult(_params.vel_d) + thrust_int;
+					math::Vector<3> thrust_sp;
+					if (_control_mode.flag_control_acceleration_enabled && _pos_sp_triplet.current.acceleration_valid) {
+						thrust_sp = math::Vector<3>(_pos_sp_triplet.current.a_x,_pos_sp_triplet.current.a_y,_pos_sp_triplet.current.a_z);
+					} else {
+						thrust_sp = vel_err.emult(_params.vel_p) + _vel_err_d.emult(_params.vel_d) + thrust_int;
+					}
 
 					if (_pos_sp_triplet.current.type == position_setpoint_s::SETPOINT_TYPE_TAKEOFF
 							&& !_takeoff_jumped && !_control_mode.flag_control_manual_enabled) {
@@ -1566,12 +1656,12 @@ DolphinPositionControl::task_main()
 						thrust_sp(2) = -_takeoff_thrust_sp;
 					}
 
-					if (!_control_mode.flag_control_velocity_enabled) {
+					if (!_control_mode.flag_control_velocity_enabled && !_control_mode.flag_control_acceleration_enabled) {
 						thrust_sp(0) = 0.0f;
 						thrust_sp(1) = 0.0f;
 					}
 
-					if (!_control_mode.flag_control_climb_rate_enabled) {
+					if (!_control_mode.flag_control_climb_rate_enabled && !_control_mode.flag_control_acceleration_enabled) {
 						thrust_sp(2) = 0.0f;
 					}
 
@@ -1649,7 +1739,7 @@ DolphinPositionControl::task_main()
 						saturation_z = true;
 					}
 
-					if (_control_mode.flag_control_velocity_enabled) {
+					if (_control_mode.flag_control_velocity_enabled || _control_mode.flag_control_acceleration_enabled) {
 
 						/* limit max tilt */
 						if (thr_min >= 0.0f && tilt_max < M_PI_F / 2 - 0.05f) {
@@ -1739,7 +1829,7 @@ DolphinPositionControl::task_main()
 					}
 
 					/* calculate attitude setpoint from thrust vector */
-					if (_control_mode.flag_control_velocity_enabled) {
+					if (_control_mode.flag_control_velocity_enabled || _control_mode.flag_control_acceleration_enabled) {
 						/* desired body_z axis = -normalize(thrust_vector) */
 						math::Vector<3> body_x;
 						math::Vector<3> body_y;
@@ -1874,8 +1964,9 @@ DolphinPositionControl::task_main()
 			}
 
 			/* do not move yaw while sitting on the ground */
-			else if (!_vehicle_status.condition_landed &&
-					!(!_control_mode.flag_control_altitude_enabled && _manual.z < 0.1f)) {
+			/* TODO Remove this condition, for now keep threshold zero */
+			else {
+
 
 				/* we want to know the real constraint, and global overrides manual */
 				const float yaw_rate_max = (_params.man_yaw_max < _params.global_yaw_max) ? _params.man_yaw_max :
@@ -1885,7 +1976,7 @@ DolphinPositionControl::task_main()
 				_att_sp.yaw_sp_move_rate = _manual.r * yaw_rate_max;
 				float yaw_target = _wrap_pi(_att_sp.yaw_body + _att_sp.yaw_sp_move_rate * dt);
 				float yaw_offs = _wrap_pi(yaw_target - _yaw);
-
+				//warnx("Yaw Rate %4.4f, manual r %4.4f, max yaw %4.4f", (double)_att_sp.yaw_sp_move_rate, (double)_manual.r, (double)yaw_rate_max);
 				// If the yaw offset became too big for the system to track stop
 				// shifting it
 
@@ -1905,17 +1996,49 @@ DolphinPositionControl::task_main()
 			if (!_control_mode.flag_control_climb_rate_enabled) {
 				float thr_val = throttle_curve(_manual.z, _params.thr_hover);
 				_att_sp.thrust = math::min(thr_val, _manual_thr_max.get());
-
 				/* enforce minimum throttle if not landed */
-				if (!_vehicle_status.condition_landed) {
-					_att_sp.thrust = math::max(_att_sp.thrust, _manual_thr_min.get());
-				}
+				//Not Needed
+				//	if (!_vehicle_land_detected.landed) {
+				//	_att_sp.thrust = math::max(_att_sp.thrust, _manual_thr_min.get());
+				//}
 			}
 
 			math::Matrix<3, 3> R_sp;
 
-			/* construct attitude setpoint rotation matrix */
-			R_sp.from_euler(_att_sp.roll_body, _att_sp.pitch_body, _att_sp.yaw_body);
+			// construct attitude setpoint rotation matrix. modify the setpoints for roll
+			// and pitch such that they reflect the user's intention even if a yaw error
+			// (yaw_sp - yaw) is present. In the presence of a yaw error constructing a rotation matrix
+			// from the pure euler angle setpoints will lead to unexpected attitude behaviour from
+			// the user's view as the euler angle sequence uses the  yaw setpoint and not the current
+			// heading of the vehicle.
+
+			// calculate our current yaw error
+			float yaw_error = _wrap_pi(_att_sp.yaw_body - _yaw);
+
+			// compute the vector obtained by rotating a z unit vector by the rotation
+			// given by the roll and pitch commands of the user
+			math::Vector<3> zB = {0, 0, 1};
+			math::Matrix<3,3> R_sp_roll_pitch;
+			R_sp_roll_pitch.from_euler(_att_sp.roll_body, _att_sp.pitch_body, 0);
+			math::Vector<3> z_roll_pitch_sp = R_sp_roll_pitch * zB;
+
+
+			// transform the vector into a new frame which is rotated around the z axis
+			// by the current yaw error. this vector defines the desired tilt when we look
+			// into the direction of the desired heading
+			math::Matrix<3,3> R_yaw_correction;
+			R_yaw_correction.from_euler(0.0f, 0.0f, -yaw_error);
+			z_roll_pitch_sp = R_yaw_correction * z_roll_pitch_sp;
+
+			// use the formula z_roll_pitch_sp = R_tilt * [0;0;1]
+			// to calculate the new desired roll and pitch angles
+			// R_tilt can be written as a function of the new desired roll and pitch
+			// angles. we get three equations and have to solve for 2 unknowns
+			float pitch_new = asinf(z_roll_pitch_sp(0));
+			float roll_new = -atan2f(z_roll_pitch_sp(1), z_roll_pitch_sp(2));
+
+			R_sp.from_euler(roll_new, pitch_new, _att_sp.yaw_body);
+
 			memcpy(&_att_sp.R_body[0], R_sp.data, sizeof(_att_sp.R_body));
 
 			/* reset the acceleration set point for all non-attitude flight modes */
@@ -1940,14 +2063,15 @@ DolphinPositionControl::task_main()
 		_vel_prev = _vel;
 
 		/* publish attitude setpoint
-		 * Do not publish if offboard is enabled but position/velocity control is disabled,
+		 * Do not publish if offboard is enabled but position/velocity/accel control is disabled,
 		 * in this case the attitude setpoint is published by the mavlink app. Also do not publish
 		 * if the vehicle is a VTOL and it's just doing a transition (the VTOL attitude control module will generate
 		 * attitude setpoints for the transition).
 		 */
 		if (!(_control_mode.flag_control_offboard_enabled &&
 				!(_control_mode.flag_control_position_enabled ||
-				  _control_mode.flag_control_velocity_enabled))) {
+				  _control_mode.flag_control_velocity_enabled ||
+				  _control_mode.flag_control_acceleration_enabled))) {
 
 			if (_att_sp_pub != nullptr) {
 				orb_publish(_attitude_setpoint_id, _att_sp_pub, &_att_sp);
@@ -1962,7 +2086,7 @@ DolphinPositionControl::task_main()
 				     && !_control_mode.flag_control_climb_rate_enabled;
 	}
 
-	mavlink_log_info(_mavlink_fd, "[dpc] stopped");
+	mavlink_log_info(&_mavlink_log_pub, "[dpc] stopped");
 
 	_control_task = -1;
 }
@@ -1997,21 +2121,21 @@ int dp_pos_control_main(int argc, char *argv[])
 
 	if (!strcmp(argv[1], "start")) {
 
-		if (pos_control::g_control != nullptr) {
+		if (dp_pos_control::g_control != nullptr) {
 			warnx("already running");
 			return 1;
 		}
 
-		pos_control::g_control = new DolphinPositionControl;
+		dp_pos_control::g_control = new DolphinPositionControl;
 
-		if (pos_control::g_control == nullptr) {
+		if (dp_pos_control::g_control == nullptr) {
 			warnx("alloc failed");
 			return 1;
 		}
 
-		if (OK != pos_control::g_control->start()) {
-			delete pos_control::g_control;
-			pos_control::g_control = nullptr;
+		if (OK != dp_pos_control::g_control->start()) {
+			delete dp_pos_control::g_control;
+			dp_pos_control::g_control = nullptr;
 			warnx("start failed");
 			return 1;
 		}
@@ -2020,18 +2144,18 @@ int dp_pos_control_main(int argc, char *argv[])
 	}
 
 	if (!strcmp(argv[1], "stop")) {
-		if (pos_control::g_control == nullptr) {
+		if (dp_pos_control::g_control == nullptr) {
 			warnx("not running");
 			return 1;
 		}
 
-		delete pos_control::g_control;
-		pos_control::g_control = nullptr;
+		delete dp_pos_control::g_control;
+		dp_pos_control::g_control = nullptr;
 		return 0;
 	}
 
 	if (!strcmp(argv[1], "status")) {
-		if (pos_control::g_control) {
+		if (dp_pos_control::g_control) {
 			warnx("running");
 			return 0;
 

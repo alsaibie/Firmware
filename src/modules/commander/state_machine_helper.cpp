@@ -282,7 +282,7 @@ transition_result_t arming_state_transition(struct vehicle_status_s *status,
 			      status_flags->condition_system_hotplug_timeout) ||
 			     (new_arming_state == vehicle_status_s::ARMING_STATE_ARMED)) {
 
-				mavlink_and_console_log_critical(mavlink_log_pub, "Not ready to fly: Sensors not set up correctly");
+				mavlink_and_console_log_critical(mavlink_log_pub, "Not ready to fly now: Sensors not set up correctly");
 				status_flags->condition_system_prearm_error_reported = true;
 			}
 			feedback_provided = true;

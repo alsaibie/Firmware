@@ -1,6 +1,6 @@
 ############################################################################
 #
-#   Copyright (c) 2016 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2016 RescueBot Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -31,11 +31,14 @@
 #
 ############################################################################
 px4_add_module(
-	MODULE modules__dp_pos_control
-	MAIN dp_pos_control
-	STACK_MAIN 1200
+	MODULE modules__rescuebot_commander
+	MAIN rescuebot_commander
+	STACK_MAIN 2056
+	STACK_MAX 2450
+	COMPILE_FLAGS
+		-Os
 	SRCS
-		dp_pos_control_main.cpp
+		rescuebot_commander.cpp
 	DEPENDS
 		platforms__common
 	)

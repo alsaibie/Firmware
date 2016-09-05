@@ -81,6 +81,8 @@ class XMLOutput():
                 xml_group.attrib["image"] = "Rover"
             elif (group.GetName() == "Boat"):
                 xml_group.attrib["image"] = "Boat"
+            elif (group.GetName() == "Submarine"):
+            	xml_group.attrib["image"] = "Submarine"
             else:
                 xml_group.attrib["image"] = "AirframeUnknown"
             for param in group.GetParams():

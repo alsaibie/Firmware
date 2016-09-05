@@ -169,6 +169,7 @@ private:
 	math::Vector<3>		_rates_int;		/**< angular rates integral error */
 	float				_thrust_sp;		/**< thrust setpoint */
 	math::Vector<3>		_att_control;	/**< attitude control vector */
+	math::Vector<4>		_att_control_mixed;	/**< mixed attitude control vector */
 
 	math::Matrix<3, 3>  _I;				/**< identity matrix */
 
@@ -220,6 +221,7 @@ private:
 		math::Vector<3> auto_rate_max;		/**< attitude rate limits in auto modes */
 		math::Vector<3> acro_rate_max;		/**< max attitude rates in acro mode */
 		float rattitude_thres;
+		int32_t motion_type;
 	}		_params;
 
 
@@ -356,6 +358,7 @@ DolphinAttitudeControl::DolphinAttitudeControl() :
 	_rates_int.zero();
 	_thrust_sp = 0.0f;
 	_att_control.zero();
+	_att_control_mixed.zero();
 
 	_I.identity();
 
@@ -385,7 +388,7 @@ DolphinAttitudeControl::DolphinAttitudeControl() :
 	_params_handles.rattitude_thres = 	param_find("DP_RATT_TH");
 	_params_handles.roll_tc			= 	param_find("DP_ROLL_TC");
 	_params_handles.pitch_tc		= 	param_find("DP_PITCH_TC");
-
+	_params_handles.motion_type		= 	param_find("DP_MOTION_TYPE");
 
 
 
@@ -618,99 +621,116 @@ DolphinAttitudeControl::control_attitude(float dt)
 
 	_thrust_sp = _v_att_sp.thrust;
 
-	/* construct attitude setpoint rotation matrix */
-	math::Matrix<3, 3> R_sp;
-	R_sp.set(_v_att_sp.R_body);
-
-	/* get current rotation matrix from control state quaternions */
-	math::Quaternion q_att(_ctrl_state.q[0], _ctrl_state.q[1], _ctrl_state.q[2], _ctrl_state.q[3]);
-	math::Matrix<3, 3> R = q_att.to_dcm();
-
-	/* all input data is ready, run controller itself */
-
-	/* try to move thrust vector shortest way, because yaw response is slower than roll/pitch */
-	math::Vector<3> R_z(R(0, 2), R(1, 2), R(2, 2));
-	math::Vector<3> R_sp_z(R_sp(0, 2), R_sp(1, 2), R_sp(2, 2));
-
-	/* axis and sin(angle) of desired rotation */
-	math::Vector<3> e_R = R.transposed() * (R_z % R_sp_z);
-
-	/* calculate angle error */
-	float e_R_z_sin = e_R.length();
-	float e_R_z_cos = R_z * R_sp_z;
-
-	/* calculate weight for yaw control */
-	float yaw_w = R_sp(2, 2) * R_sp(2, 2);
-
-	/* calculate rotation matrix after roll/pitch only rotation */
-	math::Matrix<3, 3> R_rp;
-
-	if (e_R_z_sin > 0.0f) {
-		/* get axis-angle representation */
-		float e_R_z_angle = atan2f(e_R_z_sin, e_R_z_cos);
-		math::Vector<3> e_R_z_axis = e_R / e_R_z_sin;
-
-		e_R = e_R_z_axis * e_R_z_angle;
-
-		/* cross product matrix for e_R_axis */
-		math::Matrix<3, 3> e_R_cp;
-		e_R_cp.zero();
-		e_R_cp(0, 1) = -e_R_z_axis(2);
-		e_R_cp(0, 2) = e_R_z_axis(1);
-		e_R_cp(1, 0) = e_R_z_axis(2);
-		e_R_cp(1, 2) = -e_R_z_axis(0);
-		e_R_cp(2, 0) = -e_R_z_axis(1);
-		e_R_cp(2, 1) = e_R_z_axis(0);
-
-		/* rotation matrix for roll/pitch only rotation */
-		R_rp = R * (_I + e_R_cp * e_R_z_sin + e_R_cp * e_R_cp * (1.0f - e_R_z_cos));
-
-	} else {
-		/* zero roll/pitch rotation */
-		R_rp = R;
+	/* For 2D Motion */
+	//if(_params.motion_type==0){
+	if(1){
+		/* Pass set point to rate vector */
+	//	printf("Setpoint Roll %4.2f, Pitch %4.2f, Yaw %4.2f, Thrust %4.2f\n",(double)_v_att_sp.roll_body,(double)_v_att_sp.pitch_body,
+		//	(double)_v_att_sp.yaw_body,(double)_v_att_sp.thrust);
+		_rates_sp(0) = _v_att_sp.roll_body;
+		_rates_sp(1) = _v_att_sp.pitch_body;
+		_rates_sp(2) = _v_att_sp.yaw_sp_move_rate;
+		//warnx("Yaw Rate %4.4f, Roll rate %3.4f", (double)_rates_sp(2)*10,(double)_rates_sp(0));
 	}
+	/* For 3D Motion */
+	else if(_params.motion_type==1){
 
-	/* R_rp and R_sp has the same Z axis, calculate yaw error */
-	math::Vector<3> R_sp_x(R_sp(0, 0), R_sp(1, 0), R_sp(2, 0));
-	math::Vector<3> R_rp_x(R_rp(0, 0), R_rp(1, 0), R_rp(2, 0));
-	e_R(2) = atan2f((R_rp_x % R_sp_x) * R_sp_z, R_rp_x * R_sp_x) * yaw_w;
-
-	if (e_R_z_cos < 0.0f) {
-		/* for large thrust vector rotations use another rotation method:
-		 * calculate angle and axis for R -> R_sp rotation directly */
-		math::Quaternion q;
-		q.from_dcm(R.transposed() * R_sp);
-		math::Vector<3> e_R_d = q.imag();
-		e_R_d.normalize();
-		e_R_d *= 2.0f * atan2f(e_R_d.length(), q(0));
-
-		/* use fusion of Z axis based rotation and direct rotation */
-		float direct_w = e_R_z_cos * e_R_z_cos * yaw_w;
-		e_R = e_R * (1.0f - direct_w) + e_R_d * direct_w;
 	}
+	/* Original Code for Multicopter Control */
+	else if (_params.motion_type==5){
+		/* construct attitude setpoint rotation matrix */
+		math::Matrix<3, 3> R_sp;
+		R_sp.set(_v_att_sp.R_body);
 
-	/* calculate angular rates setpoint */
-	_rates_sp = _params.att_p.emult(e_R);
+		/* get current rotation matrix from control state quaternions */
+		math::Quaternion q_att(_ctrl_state.q[0], _ctrl_state.q[1], _ctrl_state.q[2], _ctrl_state.q[3]);
+		math::Matrix<3, 3> R = q_att.to_dcm();
 
-	/* limit rates */
-	for (int i = 0; i < 3; i++) {
-		if (_v_control_mode.flag_control_velocity_enabled && !_v_control_mode.flag_control_manual_enabled) {
-			_rates_sp(i) = math::constrain(_rates_sp(i), -_params.auto_rate_max(i), _params.auto_rate_max(i));
+		/* all input data is ready, run controller itself */
+
+		/* try to move thrust vector shortest way, because yaw response is slower than roll/pitch */
+		math::Vector<3> R_z(R(0, 2), R(1, 2), R(2, 2));
+		math::Vector<3> R_sp_z(R_sp(0, 2), R_sp(1, 2), R_sp(2, 2));
+
+		/* axis and sin(angle) of desired rotation */
+		math::Vector<3> e_R = R.transposed() * (R_z % R_sp_z);
+
+		/* calculate angle error */
+		float e_R_z_sin = e_R.length();
+		float e_R_z_cos = R_z * R_sp_z;
+
+		/* calculate weight for yaw control */
+		float yaw_w = R_sp(2, 2) * R_sp(2, 2);
+
+		/* calculate rotation matrix after roll/pitch only rotation */
+		math::Matrix<3, 3> R_rp;
+
+		if (e_R_z_sin > 0.0f) {
+			/* get axis-angle representation */
+			float e_R_z_angle = atan2f(e_R_z_sin, e_R_z_cos);
+			math::Vector<3> e_R_z_axis = e_R / e_R_z_sin;
+
+			e_R = e_R_z_axis * e_R_z_angle;
+
+			/* cross product matrix for e_R_axis */
+			math::Matrix<3, 3> e_R_cp;
+			e_R_cp.zero();
+			e_R_cp(0, 1) = -e_R_z_axis(2);
+			e_R_cp(0, 2) = e_R_z_axis(1);
+			e_R_cp(1, 0) = e_R_z_axis(2);
+			e_R_cp(1, 2) = -e_R_z_axis(0);
+			e_R_cp(2, 0) = -e_R_z_axis(1);
+			e_R_cp(2, 1) = e_R_z_axis(0);
+
+			/* rotation matrix for roll/pitch only rotation */
+			R_rp = R * (_I + e_R_cp * e_R_z_sin + e_R_cp * e_R_cp * (1.0f - e_R_z_cos));
+
 		} else {
-			_rates_sp(i) = math::constrain(_rates_sp(i), -_params.dp_rate_max(i), _params.dp_rate_max(i));
+			/* zero roll/pitch rotation */
+			R_rp = R;
 		}
+
+		/* R_rp and R_sp has the same Z axis, calculate yaw error */
+		math::Vector<3> R_sp_x(R_sp(0, 0), R_sp(1, 0), R_sp(2, 0));
+		math::Vector<3> R_rp_x(R_rp(0, 0), R_rp(1, 0), R_rp(2, 0));
+		e_R(2) = atan2f((R_rp_x % R_sp_x) * R_sp_z, R_rp_x * R_sp_x) * yaw_w;
+
+		if (e_R_z_cos < 0.0f) {
+			/* for large thrust vector rotations use another rotation method:
+			 * calculate angle and axis for R -> R_sp rotation directly */
+			math::Quaternion q;
+			q.from_dcm(R.transposed() * R_sp);
+			math::Vector<3> e_R_d = q.imag();
+			e_R_d.normalize();
+			e_R_d *= 2.0f * atan2f(e_R_d.length(), q(0));
+
+			/* use fusion of Z axis based rotation and direct rotation */
+			float direct_w = e_R_z_cos * e_R_z_cos * yaw_w;
+			e_R = e_R * (1.0f - direct_w) + e_R_d * direct_w;
+		}
+
+		/* calculate angular rates setpoint */
+		_rates_sp = _params.att_p.emult(e_R);
+
+		/* limit rates */
+		for (int i = 0; i < 3; i++) {
+			if (_v_control_mode.flag_control_velocity_enabled && !_v_control_mode.flag_control_manual_enabled) {
+				_rates_sp(i) = math::constrain(_rates_sp(i), -_params.auto_rate_max(i), _params.auto_rate_max(i));
+			} else {
+				_rates_sp(i) = math::constrain(_rates_sp(i), -_params.dp_rate_max(i), _params.dp_rate_max(i));
+			}
+		}
+
+		/* feed forward yaw setpoint rate */
+		_rates_sp(2) += _v_att_sp.yaw_sp_move_rate * yaw_w * _params.yaw_ff;
 	}
-
-	/* feed forward yaw setpoint rate */
-	_rates_sp(2) += _v_att_sp.yaw_sp_move_rate * yaw_w * _params.yaw_ff;
-
 
 }
 
 /*
  * Attitude rates controller.
  * Input: '_rates_sp' vector, '_thrust_sp'
- * Output: '_att_control' vector
+ * Output: '_att_control_mixed' vector
  */
 void
 DolphinAttitudeControl::control_attitude_rates(float dt)
@@ -733,6 +753,7 @@ DolphinAttitudeControl::control_attitude_rates(float dt)
 	_rates_sp_prev = _rates_sp;
 	_rates_prev = rates;
 
+
 	/* update integral only if not saturated on low limit and if motor commands are not saturated */
 	if (_thrust_sp > MIN_TAKEOFF_THRUST && !_motor_limits.lower_limit && !_motor_limits.upper_limit) {
 		for (int i = 0; i < 3; i++) {
@@ -746,6 +767,29 @@ DolphinAttitudeControl::control_attitude_rates(float dt)
 			}
 		}
 	}
+
+	/*
+	 * Mix output att vector since no outside mixer is used
+	 * _att_control vector 			0..3: Roll,Pitch,Yaw,Thrust.
+	 * _att_control_mixed vector 	0..3: OutLeft,OutRight,Out3,Out4
+	 */
+
+
+
+		//_att_control_mixed(0)=(_thrust_sp*75+_att_control(2)*50)/100;
+		//_att_control_mixed(1)=(_thrust_sp*75-_att_control(2)*50)/100;
+	if(_thrust_sp<0.1f){
+		_att_control_mixed.zero();
+	}
+	else{
+		_att_control_mixed(3)=_thrust_sp;
+		_att_control_mixed(2)=_att_control(2);
+	}
+
+
+
+
+
 }
 
 void
@@ -828,7 +872,7 @@ DolphinAttitudeControl::task_main()
 			/* Check if we are in rattitude mode and the pilot is above the threshold on pitch
 			 * or roll (yaw can rotate 360 in normal att control).  If both are true don't
 			 * even bother running the attitude controllers */
-			if (_vehicle_status.main_state == vehicle_status_s::MAIN_STATE_RATTITUDE) {
+			if (_v_control_mode.flag_control_rattitude_enabled) {
 				if (fabsf(_manual_control_sp.y) > _params.rattitude_thres ||
 				    fabsf(_manual_control_sp.x) > _params.rattitude_thres) {
 					_v_control_mode.flag_control_attitude_enabled = false;
@@ -904,10 +948,10 @@ DolphinAttitudeControl::task_main()
 				control_attitude_rates(dt);
 
 				/* publish actuator controls */
-				_actuators.control[0] = (PX4_ISFINITE(_att_control(0))) ? _att_control(0) : 0.0f;
-				_actuators.control[1] = (PX4_ISFINITE(_att_control(1))) ? _att_control(1) : 0.0f;
-				_actuators.control[2] = (PX4_ISFINITE(_att_control(2))) ? _att_control(2) : 0.0f;
-				_actuators.control[3] = (PX4_ISFINITE(_thrust_sp)) ? _thrust_sp : 0.0f;
+				_actuators.control[0] = (PX4_ISFINITE(_att_control_mixed(0))) ? _att_control_mixed(0) : 0.0f;
+				_actuators.control[1] = (PX4_ISFINITE(_att_control_mixed(1))) ? _att_control_mixed(1) : 0.0f;
+				_actuators.control[2] = (PX4_ISFINITE(_att_control_mixed(2))) ? _att_control_mixed(2) : 0.0f;
+				_actuators.control[3] = (PX4_ISFINITE(_att_control_mixed(3))) ? _att_control_mixed(3) : 0.0f;
 				_actuators.timestamp = hrt_absolute_time();
 				_actuators.timestamp_sample = _ctrl_state.timestamp;
 
