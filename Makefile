@@ -193,6 +193,7 @@ px4fmu_firmware: \
 	check_px4fmu-v2_default \
 	check_px4fmu-v3_default \
 	check_px4fmu-v4_default \
+	check_px4fmu-v4_dolphin \
 	check_px4fmu-v4pro_default \
 	check_px4fmu-v5_default \
 	sizes

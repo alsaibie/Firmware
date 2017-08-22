@@ -1,0 +1,46 @@
+#!nsh
+#
+# @name Dolphin Prototype a
+#
+# @class Submarine
+#
+# @type Submarine
+#
+# @maintainer Ali AlSaibie <ali@alsaibie.com>
+
+sh /etc/init.d/rc.uAUV_dolphin_defaults
+if [ $AUTOCNF == yes ]
+then
+	param set DP_ROLL_P 8.0
+	param set DP_ROLLRATE_P 0.19
+	param set DP_ROLLRATE_I 0.1
+	param set DP_ROLLRATE_D 0.0055
+	param set DP_PITCH_P 8.0
+	param set DP_PITCHRATE_P 0.24
+	param set DP_PITCHRATE_I 0.1
+	param set DP_PITCHRATE_D 0.0065
+	param set DP_YAW_P 4.0
+	param set DP_YAWRATE_P 0.2
+	param set DP_YAWRATE_I 0.1
+	param set DP_YAWRATE_D 0.0
+	param set DP_YAW_FF 0.5
+	param set DP_ROLLRATE_MAX 720.0
+	param set DP_PITCHRATE_MAX 720.0
+	param set DP_YAWRATE_MAX 400.0
+	param set DP_ACRO_R_MAX 360.0
+	param set DP_ACRO_P_MAX 360.0
+	
+	param set DPC_THR_MIN 0.06
+	param set DPC_MANTHR_MIN 0.06
+
+	param set ATT_BIAS_MAX 0.0
+	
+fi
+	
+#choose a mixer, for uAUV control we need a plain passthrough to the servos, for now
+set MIXER dolphin_basic
+
+#no safety switch needed
+param set CBRK_IO_SAFETY    22027
+#no Airspeed Sensor Needed
+param set CBRK_AIRSPD_CHK 	162128

@@ -1027,6 +1027,25 @@ then
 	fi
 
 	#
+	# uAUV setup
+	#
+	if [ $VEHICLE_TYPE == uAUV ]
+	then
+		echo "DOLPHIN"
+		# 12 is MAV_TYPE_SUBMARINE
+		# Set as 2 for now, for apps to register it. Won't arm with 12 nor send Actuator data
+		set MAV_TYPE 2
+
+		# Load mixer and configure outputs
+		sh /etc/init.d/rc.interface
+
+		# Start standard uAUV swimmer apps
+		sh /etc/init.d/rc.uAUV_dolphin_apps
+		param set MAV_TYPE 2
+	fi
+
+
+	#
 	# For snapdragon, we need a passthrough mode
 	# Do not run any mavlink instances since we need the serial port for
 	# communication with Snapdragon.
