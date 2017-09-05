@@ -30,15 +30,12 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
-include_directories(build_px4fmu-v4_dolphin/topics_temporary_header/)
 px4_add_module(
-	MODULE modules__dp_att_control
-	MAIN dp_att_control
-	STACK_MAIN 1200
-	STACK_MAX 3500
-	COMPILE_FLAGS
+	MODULE modules__dp_att_control__dp_att_control_tests
+	MAIN dp_att_control_tests
 	SRCS
-		dp_att_control.cpp
+		dp_att_control_tests.cpp
+		../dp_att_control.cpp
 	DEPENDS
 		platforms__common
 	)

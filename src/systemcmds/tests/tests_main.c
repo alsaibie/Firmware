@@ -95,6 +95,7 @@ const struct {
 	{"controllib",		controllib_test_main,	0},
 	{"mavlink",		mavlink_tests_main,	0},
 	{"mc_pos_control",	mc_pos_control_tests_main,	0},
+	{"dp_att_control",	dp_att_control_tests_main,	0},
 	{"sf0x",		sf0x_tests_main,	0},
 #ifndef __PX4_DARWIN
 	{"uorb",		uorb_tests_main,	0},

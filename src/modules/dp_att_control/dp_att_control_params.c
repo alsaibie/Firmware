@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2013-2015 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2016-2017 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,11 +35,9 @@
  * @file dolphin_att_control_params.c
  * Parameters for Dolphin attitude controller.
  *
- * @author Lorenz Meier <lorenz@px4.io>
- * @author Anton Babushkin <anton@px4.io>
- *
+ * Adopted from mc_att_control_params.c
  * Modified by:
- * @author Ali AlSaibie <ali@alsaibie.com>
+ * @author Ali AlSaibie <alsaibie@gatech.edu>
  */
 
 /**
@@ -109,6 +107,18 @@ PARAM_DEFINE_FLOAT(DP_ROLLRATE_P, 0.15f);
 PARAM_DEFINE_FLOAT(DP_ROLLRATE_I, 0.05f);
 
 /**
+ * Roll rate integrator limit
+ *
+ * Roll rate integrator limit. Can be set to increase the amount of integrator available to counteract disturbances or reduced to improve settling time after large roll moment trim changes.
+ *
+ * @min 0.0
+ * @decimal 2
+ * @increment 0.01
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_RR_INT_LIM, 0.30f);
+
+/**
  * Roll rate D gain
  *
  * Roll rate differential gain. Small values help reduce fast oscillations. If value is too big oscillations will appear again.
@@ -172,6 +182,18 @@ PARAM_DEFINE_FLOAT(DP_PITCHRATE_P, 0.15f);
 PARAM_DEFINE_FLOAT(DP_PITCHRATE_I, 0.05f);
 
 /**
+ * Pitch rate integrator limit
+ *
+ * Pitch rate integrator limit. Can be set to increase the amount of integrator available to counteract disturbances or reduced to improve settling time after large pitch moment trim changes.
+ *
+ * @min 0.0
+ * @decimal 2
+ * @increment 0.01
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_PR_INT_LIM, 0.30f);
+
+/**
  * Pitch rate D gain
  *
  * Pitch rate differential gain. Small values help reduce fast oscillations. If value is too big oscillations will appear again.
@@ -232,6 +254,18 @@ PARAM_DEFINE_FLOAT(DP_YAWRATE_P, 0.2f);
  * @group Dolphin Attitude Control
  */
 PARAM_DEFINE_FLOAT(DP_YAWRATE_I, 0.1f);
+
+/**
+ * Yaw rate integrator limit
+ *
+ * Yaw rate integrator limit. Can be set to increase the amount of integrator available to counteract disturbances or reduced to improve settling time after large yaw moment trim changes.
+ *
+ * @min 0.0
+ * @decimal 2
+ * @increment 0.01
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_YR_INT_LIM, 0.30f);
 
 /**
  * Yaw rate D gain
@@ -379,6 +413,110 @@ PARAM_DEFINE_FLOAT(DP_ACRO_Y_MAX, 360.0f);
  */
 PARAM_DEFINE_FLOAT(DP_RATT_TH, 1.0f);
 
+/**
+ * Battery power level scaler
+ *
+ * This compensates for voltage drop of the battery over time by attempting to
+ * normalize performance across the operating range of the battery. The copter
+ * should constantly behave as if it was fully charged with reduced max acceleration
+ * at lower battery percentages. i.e. if hover is at 0.5 throttle at 100% battery,
+ * it will still be 0.5 at 60% battery.
+ *
+ * @boolean
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_INT32(DP_BAT_SCALE_EN, 0);
+
+/**
+ * TPA P Breakpoint
+ *
+ * Throttle PID Attenuation (TPA)
+ * Magnitude of throttle setpoint at which to begin attenuating roll/pitch P gain
+ *
+ * @min 0.0
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.1
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_TPA_BREAK_P, 1.0f);
+
+/**
+ * TPA I Breakpoint
+ *
+ * Throttle PID Attenuation (TPA)
+ * Magnitude of throttle setpoint at which to begin attenuating roll/pitch I gain
+ *
+ * @min 0.0
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.1
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_TPA_BREAK_I, 1.0f);
+
+/**
+ * TPA D Breakpoint
+ *
+ * Throttle PID Attenuation (TPA)
+ * Magnitude of throttle setpoint at which to begin attenuating roll/pitch D gain
+ *
+ * @min 0.0
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.1
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_TPA_BREAK_D, 1.0f);
+
+/**
+ * TPA Rate P
+ *
+ * Throttle PID Attenuation (TPA)
+ * Rate at which to attenuate roll/pitch P gain
+ * Attenuation factor is 1.0 when throttle magnitude is below the setpoint
+ * Above the setpoint, the attenuation factor is (1 - rate * (throttle - breakpoint) / (1.0 - breakpoint))
+ *
+ * @min 0.0
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.05
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_TPA_RATE_P, 0.0f);
+
+/**
+ * TPA Rate I
+ *
+ * Throttle PID Attenuation (TPA)
+ * Rate at which to attenuate roll/pitch I gain
+ * Attenuation factor is 1.0 when throttle magnitude is below the setpoint
+ * Above the setpoint, the attenuation factor is (1 - rate * (throttle - breakpoint) / (1.0 - breakpoint))
+ *
+ * @min 0.0
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.05
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_TPA_RATE_I, 0.0f);
+
+/**
+ * TPA Rate D
+ *
+ * Throttle PID Attenuation (TPA)
+ * Rate at which to attenuate roll/pitch D gain
+ * Attenuation factor is 1.0 when throttle magnitude is below the setpoint
+ * Above the setpoint, the attenuation factor is (1 - rate * (throttle - breakpoint) / (1.0 - breakpoint))
+ *
+ * @min 0.0
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.05
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_TPA_RATE_D, 0.0f);
+
 
 /**
  * Attitude Control Mode (0: 2D, 1: 3D, 2: etc new modes)
@@ -388,3 +526,21 @@ PARAM_DEFINE_FLOAT(DP_RATT_TH, 1.0f);
  * @group Dolphin Attitude Control
  */
 PARAM_DEFINE_INT32(DP_MOTION_TYPE, 0);
+
+/**
+ * Thrust Factor
+ *
+ * @unit na
+ * @min 0
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_THRUST_FACTOR, 0.25f);
+
+/**
+ * Idle Speed - as % of Max PWM
+ *
+ * @unit na
+ * @min 0
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_IDLE_SPEED, 0.15f);
