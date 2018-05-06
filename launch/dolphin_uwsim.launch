@@ -1,0 +1,39 @@
+<launch>
+
+    <!--
+        MAVROS posix SITL environment launch script modified for dolphin from mavros_posix_sitl.
+        Dolphin is an autonomous underwater vehicle (AUV) designed by the Georgia Institute of Technology
+    -->
+
+    <!-- Initial Pose : not used for now -->
+    <arg name="x" default="0"/>
+    <arg name="y" default="0"/>
+    <arg name="z" default="0"/>
+    <arg name="R" default="0"/>
+    <arg name="P" default="0"/>
+    <arg name="Y" default="0"/>
+
+
+    <arg name="est" default="lpe"/>
+    <arg name="vehicle" default="dolphin"/>
+
+    <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg vehicle)"/>
+
+    <!--<arg name="headless" default="false"/>-->
+    <!--<arg name="gui" default="true"/>-->
+    <!--<arg name="ns" default="/"/>-->
+
+    <include file="$(find px4)/launch/posix_uwsim_sitl.launch">
+        <arg name="x" value="$(arg x)"/>
+        <arg name="y" value="$(arg y)"/>
+        <arg name="z" value="$(arg z)"/>
+        <arg name="R" value="$(arg R)"/>
+        <arg name="P" value="$(arg P)"/>
+        <arg name="Y" value="$(arg Y)"/>
+        <arg name="vehicle" value="$(arg vehicle)"/>
+        <arg name="rcS" value="$(arg rcS)"/>
+    </include>
+
+</launch>
+
+<!-- vim: set et ft=xml fenc=utf-8 ff=unix sts=0 sw=4 ts=4 : -->

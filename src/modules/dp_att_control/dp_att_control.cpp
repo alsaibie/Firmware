@@ -490,8 +490,9 @@ DolphinAttitudeControl::sensor_correction_poll() {
 
 /**
  * Attitude controller.
- * Input: 'vehicle_attitude_setpoint' topics (depending on mode)
+ * Input: 'vehicle_attitude_setpoint' topics (depending on mode), ctrl_state (attitude)
  * Output: '_rates_sp' vector, '_thrust_sp'
+ * TODO: Explicitly Pass Inputs and Outputs. Make it self-contained.
  */
 void
 DolphinAttitudeControl::control_attitude(float dt) {
@@ -845,7 +846,7 @@ bool DolphinAttitudeControl::mix_control_output(math::Vector<3> &att_control, fl
     // I should never get here!
   }
 
-  PX4_INFO("New Roll Value %f", (double) roll);
+//  PX4_INFO("New Roll Value %f", (double) roll);
   float thrust_reduction = 0.0f;
   float thrust_increase = 0.0f;
   float roll_scale_2 = 1.0f;
@@ -867,19 +868,19 @@ bool DolphinAttitudeControl::mix_control_output(math::Vector<3> &att_control, fl
         // roll scaled back s.t out = 1.0f TODO: Change this, I need a function to scale back roll, not to recalculate it.
         roll_scale_2 =
                 (1.0f - (pitch_yaw_mix[i] + (thrust - thrust_reduction) + boost)) / (roll * _rotors[i].roll_scale);
-        PX4_INFO("M%i +Thrust +Out Roll Scale 2: %f", i, (double) roll_scale_2);
+//        PX4_INFO("M%i +Thrust +Out Roll Scale 2: %f", i, (double) roll_scale_2);
       } else if (out < -1.0f) {
         // Roll scaled back s.t. out = -1.0f
         roll_scale_2 =
                 (-1.0f - (pitch_yaw_mix[i] + (thrust - thrust_reduction) + boost)) / (roll * _rotors[i].roll_scale);
-        PX4_INFO("+Thrust -Out Roll Scale 2: %f", (double) roll_scale_2);
+//        PX4_INFO("+Thrust -Out Roll Scale 2: %f", (double) roll_scale_2);
       }
     } else if (thrust < 0.0f) {
       if (out > 1.0f) {
         // Scale back roll
         roll_scale_2 =
                 (1.0f - (pitch_yaw_mix[i] + (thrust + thrust_increase) + boost)) / (roll * _rotors[i].roll_scale);
-        PX4_INFO("-Thrust +Out Roll Scale 2: %f", (double) roll_scale_2);
+//        PX4_INFO("-Thrust +Out Roll Scale 2: %f", (double) roll_scale_2);
 
       } else if (out < -1.0f) {
         // Thrust negative and output with roll violates lower bound: increase thrust and scale back roll 50/50
@@ -888,7 +889,7 @@ bool DolphinAttitudeControl::mix_control_output(math::Vector<3> &att_control, fl
         // roll scaled back s.t out = 1.0f
         roll_scale_2 =
                 (-1.0f - (pitch_yaw_mix[i] + (thrust + thrust_increase) + boost)) / (roll * _rotors[i].roll_scale);
-        PX4_INFO("-Thrust -Out Roll Scale 2: %f", (double) roll_scale_2);
+//        PX4_INFO("-Thrust -Out Roll Scale 2: %f", (double) roll_scale_2);
       }
     }
 
@@ -985,6 +986,10 @@ bool DolphinAttitudeControl::mix_control_output(math::Vector<3> &att_control, fl
   mixed_att_control(1) = (outputs[1] + 1.0f) / 2.0f;
   mixed_att_control(2) = (outputs[2] + 1.0f) / 2.0f;
   mixed_att_control(3) = (outputs[3] + 1.0f) / 2.0f;
+//  PX4_INFO("Mixed Output: %f, %f, %f, %f", (double) mixed_att_control(0),
+//           (double) mixed_att_control(1),
+//           (double) mixed_att_control(2),
+//           (double) mixed_att_control(3));
   return true;
 }
 
@@ -1079,21 +1084,12 @@ DolphinAttitudeControl::task_main() {
       control_state_poll();
       sensor_correction_poll();
 
-//      /* Check if we are in rattitude mode and the pilot is above the threshold on pitch
-//       * or roll (yaw can rotate 360 in normal att control).  If both are true don't
-//       * even bother running the attitude controllers */
-//      if (_v_control_mode.flag_control_rattitude_enabled) {
-//        if (fabsf(_manual_control_sp.y) > _params.rattitude_thres ||
-//            fabsf(_manual_control_sp.x) > _params.rattitude_thres) {
-//          _v_control_mode.flag_control_attitude_enabled = false;
-//        }
-//      }
 
       if (_v_control_mode.flag_control_attitude_enabled) {
 
         //normal attitude control
         control_attitude(dt);
-
+        //control_attitude(
 
         /* publish attitude rates setpoint */
         _v_rates_sp.roll = _rates_sp(0);
@@ -1109,8 +1105,6 @@ DolphinAttitudeControl::task_main() {
           _v_rates_sp_pub = orb_advertise(_rates_sp_id, &_v_rates_sp);
         }
 
-        //}
-
       } else {
         /* attitude controller disabled, poll rates setpoint topic */
         if (_v_control_mode.flag_control_manual_enabled) {
@@ -1118,6 +1112,9 @@ DolphinAttitudeControl::task_main() {
           _rates_sp = math::Vector<3>(_manual_control_sp.y, -_manual_control_sp.x,
                                       _manual_control_sp.r).emult(_params.acro_rate_max);
           _thrust_sp = math::min(_manual_control_sp.z, MANUAL_THROTTLE_MAX_DOLPHIN);
+          PX4_INFO("Manual Control Thrust %f, Rates: %f, %f, %f", (double)_thrust_sp*100, (double)_rates_sp(0)*100,
+                   (double)_rates_sp(1) * 100,
+                   (double)_rates_sp(2) * 100);
 
           /* publish attitude rates setpoint */
           _v_rates_sp.roll = _rates_sp(0);
@@ -1149,7 +1146,6 @@ DolphinAttitudeControl::task_main() {
         control_attitude_rates(dt); // TODO: Fix such that the function explicitly takes input gives output.
 
         /* Now we mix */
-//        mix_control_output();
 
         mix_control_output(_att_control, _thrust_sp, _mixed_att_control);
 
@@ -1161,7 +1157,7 @@ DolphinAttitudeControl::task_main() {
         _actuators.timestamp = hrt_absolute_time();
         _actuators.timestamp_sample = _ctrl_state.timestamp;
 
-        /* scale effort by battery status TODO: What is this and do I need it? */
+        /* scale effort by battery status TODO: Verify this works with my setup*/
         if (_params.bat_scale_en && _battery_status.scale > 0.0f) {
           for (int i = 0; i < 4; i++) {
             _actuators.control[i] *= _battery_status.scale;

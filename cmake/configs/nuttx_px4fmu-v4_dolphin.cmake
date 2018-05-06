@@ -88,6 +88,7 @@ set(config_module_list
 	drivers/test_ppm
 	modules/commander/commander_tests
 	modules/mc_pos_control/mc_pos_control_tests
+	modules/dp_att_control/dp_att_control_tests
 	lib/controllib/controllib_test
 	modules/mavlink/mavlink_tests
 	modules/unit_test
@@ -118,15 +119,15 @@ set(config_module_list
 	#
 	# Vehicle Control
 	#
-	modules/fw_att_control
-	modules/fw_pos_control_l1
+#	modules/fw_att_control
+#	modules/fw_pos_control_l1
 #	modules/gnd_att_control
 #	modules/gnd_pos_control
 #	modules/mc_att_control
 #	modules/mc_pos_control
 	modules/dp_att_control
-#	modules/dp_pos_control
-	modules/vtol_att_control
+	modules/dp_pos_control
+#	modules/vtol_att_control
 
 	#
 	# Logging

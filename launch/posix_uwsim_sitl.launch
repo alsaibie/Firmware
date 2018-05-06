@@ -1,0 +1,37 @@
+<launch>
+
+    <!-- Posix SITL environment launch script -->
+    <arg name="x" default="0"/>
+    <arg name="y" default="0"/>
+    <arg name="z" default="0"/>
+    <arg name="R" default="0"/>
+    <arg name="P" default="0"/>
+    <arg name="Y" default="0"/>
+    <arg name="est" default="lpe"/>
+    <arg name="vehicle" default="dolphin"/>
+    <arg name="rcS" default="$(find px4)/posix-configs/SITL/init/$(arg est)/$(arg vehicle)"/>
+
+    <node name="sitl" pkg="px4" type="px4" output="screen"
+        args="$(find px4) $(arg rcS)">
+    </node>
+
+    <!--<include file="$(find underwater_vehicle_dynamics)/launch/uwsim_control_sitl.launch">-->
+        <!--&lt;!&ndash;include arguments here such as initial pos/orientation and other settings&ndash;&gt;-->
+    <!--</include>-->
+
+    <arg name="ns" default="/"/>
+    <arg name="fcu_url" default="udp://:14540@localhost:14557"/>
+    <arg name="pluginlists_yaml" default="$(find mavros)/launch/px4_pluginlists.yaml" />
+    <arg name="config_yaml" default="$(find mavros)/launch/px4_config.yaml" />
+
+    <include file="$(find px4)/launch/mavros.launch">
+        <arg name="ns" value="$(arg ns)"/>
+        <arg name="gcs_url" value="udp://@localhost"/> <!-- GCS link is provided by SITL -->
+        <arg name="fcu_url" value="$(arg fcu_url)"/>
+        <arg name="pluginlists_yaml" value="$(arg pluginlists_yaml)" />
+        <arg name="config_yaml" value="$(arg config_yaml)" />
+    </include>
+
+</launch>
+
+<!-- vim: set et ft=xml fenc=utf-8 ff=unix sts=0 sw=4 ts=4 : -->

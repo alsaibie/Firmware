@@ -30,7 +30,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
-include_directories(build_px4fmu-v4_dolphin/topics_temporary_header/)
+#include_directories(build_px4fmu-v4_dolphin/topics_temporary_header/)
 px4_add_module(
 	MODULE modules__dp_att_control
 	MAIN dp_att_control

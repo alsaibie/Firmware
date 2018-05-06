@@ -46,15 +46,47 @@
 #include <platforms/px4_middleware.h>
 #include <vector>
 #include <string>
-#include <gazebo_msgs/ModelStates.h>
 
 PositionEstimator::PositionEstimator() :
 	_n(),
-	_sub_modelstates(_n.subscribe("/gazebo/model_states", 1, &PositionEstimator::ModelStatesCallback, this)),
+//	_sub_modelstates(_n.subscribe("/gazebo/model_states", 1, &PositionEstimator::ModelStatesCallback, this)),
 	_vehicle_position_pub(_n.advertise<px4::vehicle_local_position>("vehicle_local_position", 1)),
 	_startup_time(1)
 {
+//	std::string vehicle_model;
+//	_n.param("vehicle_model", vehicle_model, std::string("iris"));
+	_sub_modelstate = _n.subscribe("/uwsim/model_state", 1, &PositionEstimator::ModelStateCallback, this);
 	_n.getParam("vehicle_model", _model_name);
+}
+
+void PositionEstimator::ModelStateCallback(const uwsim_msgs::ModelStateConstPtr &msg)
+{
+    /* We expect a single vehicle here now */
+	px4::vehicle_local_position msg_v_l_pos;
+
+	msg_v_l_pos.xy_valid = true;
+	msg_v_l_pos.z_valid = true;
+	msg_v_l_pos.v_xy_valid = true;
+	msg_v_l_pos.v_z_valid = true;
+
+	msg_v_l_pos.x = msg->pose.position.x;
+	msg_v_l_pos.y = -msg->pose.position.y;
+	msg_v_l_pos.z = -msg->pose.position.z;
+	msg_v_l_pos.vx = msg->twist.linear.x;
+	msg_v_l_pos.vy = -msg->twist.linear.y;
+	msg_v_l_pos.vz = -msg->twist.linear.z;
+
+    /* This is not required for uwsim but leave if for QGC? */
+	msg_v_l_pos.xy_global = true;
+	msg_v_l_pos.z_global = true;
+	msg_v_l_pos.ref_timestamp = _startup_time;
+	msg_v_l_pos.ref_lat = 47.378301;
+	msg_v_l_pos.ref_lon = 8.538777;
+	msg_v_l_pos.ref_alt = 300.0f;
+
+
+	msg_v_l_pos.timestamp = px4::get_time_micros();
+	_vehicle_position_pub.publish(msg_v_l_pos);
 }
 
 void PositionEstimator::ModelStatesCallback(const gazebo_msgs::ModelStatesConstPtr &msg)

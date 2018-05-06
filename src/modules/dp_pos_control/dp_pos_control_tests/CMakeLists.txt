@@ -30,12 +30,13 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
+#include_directories(build_px4fmu-v4_dolphin/topics_temporary_header/)
 px4_add_module(
 	MODULE modules__mc_pos_control__dp_pos_control_tests
 	MAIN dp_pos_control_tests
 	SRCS
 		dp_pos_control_tests.cpp
-        ../dp_pos_control_main.cpp
+        ../dp_pos_control.cpp
 	DEPENDS
 		platforms__common
 	)

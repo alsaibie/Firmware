@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2013-2015 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013-2017 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,372 +33,88 @@
 
 /**
  * @file dp_pos_control_params.c
- * Dolphin position controller parameters.
  *
- * @author Anton Babushkin <anton@px4.io>
+ * Parameters defined by the position control task for dolphin
+ * Adopted from  gnd_pos_control_params.c
+ *
+ * All the ackowledgments and credits for the fw wing app are reported in those files.
+ *
+ * @author Ali AlSaibie <alsaibie@gatech.edu>
+ */
+
+/*
+ * Controller parameters, accessible via MAVLink
  */
 
 /**
- * Minimum thrust in auto thrust control
+ * Cruise throttle
  *
- * It's recommended to set it > 0 to avoid free fall with zero thrust.
+ * This is the throttle setting required to achieve the desired cruise speed.
  *
- * @min 0.05
+ * @unit norm
+ * @min 0.0
  * @max 1.0
- * @decimal 3
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_THR_MIN, 0.12f);
-
-/**
- * Hover thrust
- *
- * Vertical thrust required to hover.
- * This value is mapped to center stick for manual throttle control.
- * With this value set to the thrust required to hover, transition
- * from manual to ALTCTL mode while hovering will occur with the
- * throttle stick near center, which is then interpreted as (near)
- * zero demand for vertical speed.
- *
- * @min 0.2
- * @max 0.8
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_THR_HOVER, 0.5f);
-
-/**
- * ALTCTL throttle curve breakpoint
- *
- * Halfwidth of deadband or reduced sensitivity center portion of curve.
- * This is the halfwidth of the center region of the ALTCTL throttle
- * curve. It extends from center-dz to center+dz.
- *
- * @min 0.0
- * @max 0.2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_ALTCTL_DZ, 0.1f);
-
-/**
- * ALTCTL throttle curve breakpoint height
- *
- * Controls the slope of the reduced sensitivity region.
- * This is the height of the ALTCTL throttle
- * curve at center-dz and center+dz.
- *
- * @min 0.0
- * @max 0.2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_ALTCTL_DY, 0.0f);
-
-/**
- * Maximum thrust in auto thrust control
- *
- * Limit max allowed thrust. Setting a value of one can put
- * the system into actuator saturation as no spread between
- * the motors is possible any more. A value of 0.8 - 0.9
- * is recommended.
- *
- * @min 0.0
- * @max 0.95
  * @decimal 2
- * @group Dolphin Position Control
+ * @increment 0.01
+ * @group Dolphin POS Control
+ */
+PARAM_DEFINE_FLOAT(DPC_THR_CRUISE, 0.1f);
+
+/**
+ * Throttle limit max
+ *
+ * This is the maximum throttle % that can be used by the controller.
+
+ *
+ * @unit norm
+ * @min 0.0
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.01
+ * @group Dolphin POS Control
  */
 PARAM_DEFINE_FLOAT(DPC_THR_MAX, 0.9f);
 
 /**
- * Minimum manual thrust
+ * Throttle limit min
  *
- * Minimum vertical thrust. It's recommended to set it > 0 to avoid free fall with zero thrust.
+ * This is the minimum throttle % that can be used by the controller.
+ * Set to 0
  *
- * @min 0.0
- * @max 1.0
- * @decimal 3
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_MANTHR_MIN, 0.08f);
-
-/**
- * Maximum manual thrust
- *
- * Limit max allowed thrust. Setting a value of one can put
- * the system into actuator saturation as no spread between
- * the motors is possible any more. A value of 0.8 - 0.9
- * is recommended.
- *
+ * @unit norm
  * @min 0.0
  * @max 1.0
  * @decimal 2
- * @group Dolphin Position Control
+ * @increment 0.01
+ * @group Dolphin POS Control
  */
-PARAM_DEFINE_FLOAT(DPC_MANTHR_MAX, 0.9f);
+PARAM_DEFINE_FLOAT(DPC_THR_MIN, 0.0f);
 
 /**
- * Proportional gain for vertical position error
+ * Idle throttle
  *
+ * This is the minimum throttle while on the ground, it should be 0
+ *
+ *
+ * @unit norm
  * @min 0.0
+ * @max 0.4
  * @decimal 2
- * @group Dolphin Position Control
+ * @increment 0.01
+ * @group DPC POS Control
  */
-PARAM_DEFINE_FLOAT(DPC_Z_P, 1.0f);
+PARAM_DEFINE_FLOAT(DPC_THR_IDLE, 0.0f);
 
 /**
- * Proportional gain for vertical velocity error
+ * Control mode for speed
+ * TODO: Adapt this to my use
  *
- * @min 0.0
- * @decimal 2
- * @group Dolphin Position Control
+ * This allows the user to choose between closed loop gps speed or open loop cruise throttle speed
+ * @min 0
+ * @max 1
+ * @value 0 open loop control
+ * @value 1 close the loop with gps speed
+ * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DPC_Z_VEL_P, 0.2f);
+PARAM_DEFINE_INT32(DPC_SP_CTRL_MODE, 0);
 
-/**
- * Integral gain for vertical velocity error
- *
- * Non zero value allows hovering thrust estimation on stabilized or autonomous takeoff.
- *
- * @min 0.0
- * @decimal 3
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_Z_VEL_I, 0.02f);
-
-/**
- * Differential gain for vertical velocity error
- *
- * @min 0.0
- * @decimal 3
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_Z_VEL_D, 0.0f);
-
-/**
- * Maximum vertical velocity
- *
- * Maximum vertical velocity in AUTO mode and endpoint for stabilized modes (ALTCTRL, POSCTRL).
- *
- * @unit m/s
- * @min 0.0
- * @max 8.0
- * @decimal 1
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_Z_VEL_MAX, 3.0f);
-
-/**
- * Vertical velocity feed forward
- *
- * Feed forward weight for altitude control in stabilized modes (ALTCTRL, POSCTRL). 0 will give slow responce and no overshot, 1 - fast responce and big overshot.
- *
- * @min 0.0
- * @max 1.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_Z_FF, 0.5f);
-
-/**
- * Proportional gain for horizontal position error
- *
- * @min 0.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_XY_P, 1.25f);
-
-/**
- * Proportional gain for horizontal velocity error
- *
- * @min 0.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_XY_VEL_P, 0.1f);
-
-/**
- * Integral gain for horizontal velocity error
- *
- * Non-zero value allows to resist wind.
- *
- * @min 0.0
- * @decimal 3
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_XY_VEL_I, 0.02f);
-
-/**
- * Differential gain for horizontal velocity error. Small values help reduce fast oscillations. If value is too big oscillations will appear again.
- *
- * @min 0.0
- * @decimal 3
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_XY_VEL_D, 0.01f);
-
-/**
- * Nominal horizontal velocity
- *
- * Normal horizontal velocity in AUTO mode and endpoint for position stabilized mode (POSCTRL).
- *
- * @unit m/s
- * @min 0.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_XY_CRUISE, 5.0f);
-
-/**
- * Maximum horizontal velocity
- *
- * Maximum horizontal velocity in AUTO mode.
- *
- * @unit m/s
- * @min 0.0
- * @max 20.0
- * @increment 1
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_XY_VEL_MAX, 12.0f);
-
-/**
- * Horizontal velocity feed forward
- *
- * Feed forward weight for position control in position control mode (POSCTRL). 0 will give slow responce and no overshot, 1 - fast responce and big overshot.
- *
- * @min 0.0
- * @max 1.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_XY_FF, 0.5f);
-
-/**
- * Maximum tilt angle in air
- *
- * Limits maximum tilt in AUTO and POSCTRL modes during flight.
- *
- * @unit deg
- * @min 0.0
- * @max 90.0
- * @decimal 1
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_TILTMAX_AIR, 45.0f);
-
-/**
- * Maximum tilt during landing
- *
- * Limits maximum tilt angle on landing.
- *
- * @unit deg
- * @min 0.0
- * @max 90.0
- * @decimal 1
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_TILTMAX_LND, 12.0f);
-
-/**
- * Landing descend rate
- *
- * @unit m/s
- * @min 0.0
- * @decimal 1
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_LAND_SPEED, 0.5f);
-
-/**
- * Takeoff climb rate
- *
- * @unit m/s
- * @min 0.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_TKO_SPEED, 1.5f);
-
-/**
- * Max manual roll
- *
- * @unit deg
- * @min 0.0
- * @max 90.0
- * @decimal 1
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_MAN_R_MAX, 35.0f);
-
-/**
- * Max manual pitch
- *
- * @unit deg
- * @min 0.0
- * @max 90.0
- * @decimal 1
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_MAN_P_MAX, 35.0f);
-
-/**
- * Max manual yaw rate
- *
- * @unit deg/s
- * @min 0.0
- * @decimal 1
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_MAN_Y_MAX, 200.0f);
-
-/**
- * Deadzone of X,Y sticks where position hold is enabled
- *
- * @min 0.0
- * @max 1.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_HOLD_XY_DZ, 0.1f);
-
-/**
- * Maximum horizontal velocity for which position hold is enabled (use 0 to disable check)
- *
- * @unit m/s
- * @min 0.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_HOLD_MAX_XY, 0.8f);
-
-/**
- * Maximum vertical velocity for which position hold is enabled (use 0 to disable check)
- *
- * @unit m/s
- * @min 0.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_HOLD_MAX_Z, 0.6f);
-
-/**
- * Low pass filter cut freq. for numerical velocity derivative
- *
- * @unit Hz
- * @min 0.0
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_VELD_LP, 5.0f);
-
-/**
- * Maximum horizonal acceleration in velocity controlled modes
- *
- * @unit m/s/s
- * @min 2.0
- * @max 15.0
- * @increment 1
- * @decimal 2
- * @group Dolphin Position Control
- */
-PARAM_DEFINE_FLOAT(DPC_ACC_HOR_MAX, 10.0f);

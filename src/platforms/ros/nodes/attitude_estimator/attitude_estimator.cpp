@@ -88,12 +88,10 @@ void AttitudeEstimator::ImuCallback(const sensor_msgs::ImuConstPtr &msg)
 {
 	px4::vehicle_attitude msg_v_att;
 
-	/* Fill px4 attitude topic with contents from modelstates topic */
+	/* Fill px4 attitude topic with contents from imu topic */
 
-	/* Convert quaternion to rotation matrix */
 	math::Quaternion quat;
-	//XXX: search for ardrone or other (other than 'plane') vehicle here
-	int index = 1;
+
 	quat(0) = (float)msg->orientation.w;
 	quat(1) = (float)msg->orientation.x;
 	quat(2) = (float) - msg->orientation.y;
@@ -117,7 +115,6 @@ int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "attitude_estimator");
 	AttitudeEstimator m;
-
 	ros::spin();
 
 	return 0;

@@ -136,7 +136,21 @@ foreach(viewer ${viewers})
 		endforeach()
 	endforeach()
 endforeach()
-
+# Add uwsim dolphin target
+add_custom_target(uwsim_dolphin
+		COMMAND ${PX4_SOURCE_DIR}/Tools/sitl_run.sh
+		$<TARGET_FILE:px4>
+		${config_sitl_rcS_dir}
+		none
+		uwsim
+		dolphin
+		${PX4_SOURCE_DIR}
+		${PX4_BINARY_DIR}
+		WORKING_DIRECTORY ${SITL_WORKING_DIR}
+		USES_TERMINAL
+		DEPENDS logs_symlink
+		)
+list(APPEND all_posix_vmd_make_targets uwsim_dolphin)
 px4_join(OUT posix_vmd_make_target_list LIST ${all_posix_vmd_make_targets} GLUE "\\n")
 add_custom_target(list_vmd_make_targets
 	COMMAND sh -c "printf \"${posix_vmd_make_target_list}\\n\""

@@ -42,7 +42,10 @@
 #include <systemlib/err.h>
 #include <unit_test/unit_test.h>
 #include <mathlib/mathlib.h>
+#ifdef CONFIG_ARCH_X86
 #include <fstream>
+#endif
+
 #define PI 3.1415926535
 #define TEST_DATA_PATH "./test_data/"
 extern "C" __EXPORT int dp_att_control_tests_main(int argc, char *argv[]);
@@ -66,7 +69,7 @@ private:
 
 DpAttControlTests::DpAttControlTests()
 {
-  att_control = new DolphinAttitudeControl();
+
 }
 
 DpAttControlTests::~DpAttControlTests()
@@ -74,7 +77,10 @@ DpAttControlTests::~DpAttControlTests()
 }
 
 bool DpAttControlTests::dp_mixer_test() {
+
+#ifdef CONFIG_ARCH_X86
   PX4_INFO("DP Mixer Test");
+  att_control = new DolphinAttitudeControl();
   // Arrange
   /* Generate dummy data */
   FILE *fp, *fp_out;
@@ -102,10 +108,10 @@ bool DpAttControlTests::dp_mixer_test() {
   fclose(fp_out);
   ut_test(ret == EOF);
   // Assert
-
-
-
 	return true;
+#else
+  return false;
+#endif
 }
 
 bool DpAttControlTests::run_tests()

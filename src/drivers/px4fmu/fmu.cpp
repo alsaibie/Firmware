@@ -284,7 +284,8 @@ private:
 	unsigned	_num_failsafe_set;
 	unsigned	_num_disarmed_set;
 	bool		_safety_off;
-	bool		_safety_disabled;
+  bool		_safety_disabled;
+	static bool    _disarm_outputs_on_prearm;
 	orb_advert_t		_to_safety;
 	orb_advert_t      _to_mixer_status; 	///< mixer status flags
 
@@ -447,8 +448,13 @@ PX4FMU::PX4FMU(bool run_as_task) :
 
 	/* only enable this during development */
 	_debug_enabled = false;
-}
 
+
+
+
+}
+//bool PX4FMU::_disarm_outputs_on_prearm = circuit_breaker_enabled("CBRK_DISABLE_IO_ON_PREARM",
+//                                                    CBRK_DISABLE_IO_ON_PREARM);
 PX4FMU::~PX4FMU()
 {
 	for (unsigned i = 0; i < actuator_controls_s::NUM_ACTUATOR_CONTROL_GROUPS; i++) {
@@ -505,7 +511,6 @@ PX4FMU::init()
 	}
 
 	_safety_disabled = circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY);
-
 	/* force a reset of the update rate */
 	_current_update_rate = 0;
 
@@ -1352,7 +1357,6 @@ PX4FMU::cycle()
 				/* do mixing */
 				float outputs[_max_actuators];
 				size_t mixed_num_outputs = _mixers->mix(outputs, _num_outputs, NULL);
-
 				/* publish mixer status */
 				multirotor_motor_limits_s multirotor_motor_limits = {};
 				multirotor_motor_limits.saturation_status = _mixers->get_saturation_status();
@@ -1392,7 +1396,8 @@ PX4FMU::cycle()
 				/* overwrite outputs in case of lockdown with disarmed PWM values */
 				if (_armed.lockdown || _armed.manual_lockdown) {
 					for (size_t i = 0; i < mixed_num_outputs; i++) {
-						pwm_limited[i] = _disarmed_pwm[i];
+
+            pwm_limited[i] = _disarmed_pwm[i];
 					}
 				}
 
@@ -1858,10 +1863,12 @@ PX4FMU::control_callback(uintptr_t handle,
 	/* throttle not arming - mark throttle input as invalid */
 	if (arm_nothrottle() && !_armed.in_esc_calibration_mode) {
 		if ((control_group == actuator_controls_s::GROUP_INDEX_ATTITUDE ||
-		     control_group == actuator_controls_s::GROUP_INDEX_ATTITUDE_ALTERNATE) &&
-		    control_index == actuator_controls_s::INDEX_THROTTLE) {
+		     control_group == actuator_controls_s::GROUP_INDEX_ATTITUDE_ALTERNATE)
+        && ((control_index == actuator_controls_s::INDEX_THROTTLE) || true )) {
 			/* set the throttle to an invalid value */
 			input = NAN_VALUE;
+      //AA: I still want outputs to be disarmed even though I'm prearmed. Since I'm mixing in my app not a mixer
+      //TODO:
 		}
 	}
 

@@ -91,7 +91,7 @@ protected:
 
 	/**
 	 *
-	 * Handle incoming mavlink messages ant publish them to ROS ("Mavlink Receiver")
+	 * Handle incoming mavlink messages and publish them to ROS ("Mavlink Receiver")
 	 *
 	 * */
 	void handle_msg(const mavlink_message_t *mmsg, uint8_t sysid, uint8_t compid);

@@ -40,6 +40,7 @@
 
 #include "ros/ros.h"
 #include <gazebo_msgs/ModelStates.h>
+#include <underwater_vehicle_dynamics/ModelState.h>
 #include <sensor_msgs/Imu.h>
 
 class PositionEstimator
@@ -51,9 +52,11 @@ public:
 
 protected:
 	void ModelStatesCallback(const gazebo_msgs::ModelStatesConstPtr &msg);
+	void ModelStatesCallback(const underwater_vehicle_dynamics::ModelStatesConstPtr &msg);
 
 	ros::NodeHandle _n;
 	ros::Subscriber _sub_modelstates;
+	ros::Subscriber _sub_modelstate;
 	ros::Publisher _vehicle_position_pub;
 
 	uint64_t _startup_time;
