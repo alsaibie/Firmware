@@ -67,7 +67,7 @@
 #include <uORB/topics/vehicle_status.h>
 
 /**
- * Multicopter attitude control app start / stop handling function
+ * Dolphin attitude control app start / stop handling function
  */
 extern "C" __EXPORT int dp_att_control_main(int argc, char *argv[]);
 
@@ -133,7 +133,7 @@ private:
 	 * Mix Control Output - make public for testing purposes for now <- TOOD: Fix
 	 */
 public:
-	bool    mix_control_output(math::Vector<3> &att_control, float thrust, math::Vector<4> & mixed_att_control);
+	bool    mix_control_output(matrix::Vector3f &att_control, float thrust, matrix::Vector<float, 4> & mixed_att_control);
 private:
 
 	/**
@@ -251,7 +251,7 @@ private:
 
 		(ParamFloat<px4::params::SENS_BOARD_X_OFF>) _board_offset_x,
 		(ParamFloat<px4::params::SENS_BOARD_Y_OFF>) _board_offset_y,
-		(ParamFloat<px4::params::SENS_BOARD_Z_OFF>) _board_offset_z,
+		(ParamFloat<px4::params::SENS_BOARD_Z_OFF>) _board_offset_z
 
 //		(ParamFloat<px4::params::VT_WV_YAWR_SCL>) _vtol_wv_yaw_rate_scale		/**< Scale value [0, 1] for yaw rate setpoint  */
 	)

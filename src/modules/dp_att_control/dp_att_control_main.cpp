@@ -184,8 +184,8 @@ DolphinAttitudeControl::parameters_updated()
 
 	/* angular rate limits */
 	_dp_rate_max(0) = math::radians(_roll_rate_max.get());
-	_mp_rate_max(1) = math::radians(_pitch_rate_max.get());
-	_mp_rate_max(2) = math::radians(_yaw_rate_max.get());
+	_dp_rate_max(1) = math::radians(_pitch_rate_max.get());
+	_dp_rate_max(2) = math::radians(_yaw_rate_max.get());
 
 	/* auto angular rate limits */
 	_auto_rate_max(0) = math::radians(_roll_rate_max.get());
@@ -289,8 +289,8 @@ DolphinAttitudeControl::vehicle_status_poll()
 		/* set correct uORB ID, depending on if vehicle is VTOL or not */
 		if (_rates_sp_id == nullptr) {
 			if (_vehicle_status.is_vtol) {
-				_rates_sp_id = ORB_ID(dp_virtual_rates_setpoint);
-				_actuators_id = ORB_ID(actuator_controls_virtual_dp);
+				_rates_sp_id = ORB_ID(mc_virtual_rates_setpoint);
+				_actuators_id = ORB_ID(actuator_controls_virtual_mc);
 
 			} else {
 				_rates_sp_id = ORB_ID(vehicle_rates_setpoint);
@@ -375,7 +375,7 @@ DolphinAttitudeControl::sensor_bias_poll()
  * Output: '_rates_sp' vector, '_thrust_sp'
  */
 void
-MulticopterAttitudeControl::control_attitude(float dt)
+DolphinAttitudeControl::control_attitude(float dt)
 {
 	vehicle_attitude_setpoint_poll();
 	_thrust_sp = _v_att_sp.thrust;
@@ -701,10 +701,11 @@ DolphinAttitudeControl::run()
 				/* attitude controller disabled, poll rates setpoint topic */
 				if (_v_control_mode.flag_control_manual_enabled) {
 					/* manual rates control - ACRO mode */
-					Vector3f man_rate_sp(
-							math::superexpo(_manual_control_sp.y, _acro_expo_rp.get(), _acro_superexpo_rp.get()),
-							math::superexpo(-_manual_control_sp.x, _acro_expo_rp.get(), _acro_superexpo_rp.get()),
-							math::superexpo(_manual_control_sp.r, _acro_expo_y.get(), _acro_superexpo_y.get()));
+                    Vector3f man_rate_sp;
+//					Vector3f man_rate_sp(
+//							math::superexpo(_manual_control_sp.y, _acro_expo_rp.get(), _acro_superexpo_rp.get()),
+//							math::superexpo(-_manual_control_sp.x, _acro_expo_rp.get(), _acro_superexpo_rp.get()),
+//							math::superexpo(_manual_control_sp.r, _acro_expo_y.get(), _acro_superexpo_y.get()));
 					_rates_sp = man_rate_sp.emult(_acro_rate_max);
 					_thrust_sp = _manual_control_sp.z;
 

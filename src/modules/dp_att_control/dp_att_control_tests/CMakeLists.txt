@@ -35,7 +35,7 @@ px4_add_module(
 	MAIN dp_att_control_tests
 	SRCS
 		dp_att_control_tests.cpp
-		../dp_att_control.cpp
+		../dp_att_control_main.cpp
 	DEPENDS
 		platforms__common
 	)
