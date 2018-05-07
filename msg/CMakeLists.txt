@@ -76,6 +76,7 @@ set(msg_files
 	obstacle_distance.msg
 	offboard_control_mode.msg
 	optical_flow.msg
+	optical_pose.msg
 	parameter_update.msg
 	position_setpoint.msg
 	position_setpoint_triplet.msg
