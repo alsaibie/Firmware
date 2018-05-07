@@ -40,7 +40,7 @@
  */
 
 #include <systemlib/err.h>
-#include <unit_test/unit_test.h>
+#include <unit_test.h>
 #include <mathlib/mathlib.h>
 #ifdef CONFIG_ARCH_X86
 #include <fstream>

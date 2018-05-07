@@ -30,7 +30,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
-#include_directories(build_px4fmu-v4_dolphin/topics_temporary_header/)
+
 px4_add_module(
 	MODULE modules__dp_att_control
 	MAIN dp_att_control
@@ -38,8 +38,8 @@ px4_add_module(
 	STACK_MAX 3500
 	COMPILE_FLAGS
 	SRCS
-		dp_att_control.cpp
+		dp_att_control_main.cpp
 	DEPENDS
-		platforms__common
+		mathlib
 	)
 # vim: set noet ft=cmake fenc=utf-8 ff=unix :

@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2017 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013-2018 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,339 +41,231 @@
  *
  */
 
-#include <conversion/rotation.h>
-#include <drivers/drv_hrt.h>
-#include <lib/geo/geo.h>
-#include <lib/mathlib/mathlib.h>
+#include <lib/mixer/mixer.h>
+#include <mathlib/math/filter/LowPassFilter2p.hpp>
+#include <matrix/matrix/math.hpp>
+#include <perf/perf_counter.h>
 #include <px4_config.h>
 #include <px4_defines.h>
+#include <px4_module.h>
+#include <px4_module_params.h>
 #include <px4_posix.h>
 #include <px4_tasks.h>
-#include <systemlib/circuit_breaker.h>
-#include <systemlib/err.h>
-#include <systemlib/param/param.h>
-#include <systemlib/perf_counter.h>
-#include <systemlib/systemlib.h>
-#include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/battery_status.h>
-#include <uORB/topics/control_state.h>
 #include <uORB/topics/manual_control_setpoint.h>
-#include <uORB/topics/mc_att_ctrl_status.h>
 #include <uORB/topics/multirotor_motor_limits.h>
 #include <uORB/topics/parameter_update.h>
+#include <uORB/topics/rate_ctrl_status.h>
+#include <uORB/topics/sensor_bias.h>
 #include <uORB/topics/sensor_correction.h>
 #include <uORB/topics/sensor_gyro.h>
+#include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_control_mode.h>
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/vehicle_status.h>
-#include <uORB/uORB.h>
 
-#define YAW_DEADZONE	0.05f
-#define MIN_TAKEOFF_THRUST    0.2f
-#define TPA_RATE_LOWER_LIMIT 0.05f
-#define MANUAL_THROTTLE_MAX_DOLPHIN	0.9f
-#define ATTITUDE_TC_DEFAULT 0.2f
-
-#define AXIS_INDEX_ROLL 0
-#define AXIS_INDEX_PITCH 1
-#define AXIS_INDEX_YAW 2
-#define AXIS_COUNT 3
+/**
+ * Multicopter attitude control app start / stop handling function
+ */
+extern "C" __EXPORT int dp_att_control_main(int argc, char *argv[]);
 
 #define MAX_GYRO_COUNT 3
 
-class DolphinAttitudeControl
+
+class DolphinAttitudeControl : public ModuleBase<DolphinAttitudeControl>, public ModuleParams
 {
 public:
-		DolphinAttitudeControl();
-	~DolphinAttitudeControl();
+	DolphinAttitudeControl();
 
-	int start();
-	bool task_running() { return _task_running; }
+	virtual ~DolphinAttitudeControl() = default;
+
+	/** @see ModuleBase */
+	static int task_spawn(int argc, char *argv[]);
+
+	/** @see ModuleBase */
+	static DolphinAttitudeControl *instantiate(int argc, char *argv[]);
+
+	/** @see ModuleBase */
+	static int custom_command(int argc, char *argv[]);
+
+	/** @see ModuleBase */
+	static int print_usage(const char *reason = nullptr);
+
+	/** @see ModuleBase::run() */
+	void run() override;
 
 private:
-    bool	_task_should_exit{false};		/**< if true, task_main() should exit */
-    bool	_task_running{false};			/**< if true, task is running in its mainloop */
-    int		_control_task;			/**< task handle */
 
-    int		_ctrl_state_sub;		/**< control state subscription */
-    int		_v_att_sp_sub;			/**< vehicle attitude setpoint subscription */
-    int		_v_rates_sp_sub;		/**< vehicle rates setpoint subscription */
-    int		_v_control_mode_sub;	/**< vehicle control mode subscription */
-    int		_params_sub;			/**< parameter updates subscription */
-    int		_manual_control_sp_sub;	/**< manual control setpoint subscription */
-    int		_armed_sub;				/**< arming status subscription */
-    int		_vehicle_status_sub;	/**< vehicle status subscription */
-    int 	_motor_limits_sub;		/**< motor limits subscription */
-    int 	_battery_status_sub;	/**< battery status subscription */
-    int	_sensor_gyro_sub[MAX_GYRO_COUNT];	/**< gyro data subscription */
-    int	_sensor_correction_sub;	/**< sensor thermal correction subscription */
+	/**
+	 * initialize some vectors/matrices from parameters
+	 */
+	void			parameters_updated();
 
-    unsigned _gyro_count;
-    int _selected_gyro;
+	/**
+	 * Check for parameter update and handle it.
+	 */
+	void		battery_status_poll();
+	void		parameter_update_poll();
+	void		sensor_bias_poll();
+	void		sensor_correction_poll();
+	void		vehicle_attitude_poll();
+	void		vehicle_attitude_setpoint_poll();
+	void		vehicle_control_mode_poll();
+	void		vehicle_manual_poll();
+	void		vehicle_motor_limits_poll();
+	void		vehicle_rates_setpoint_poll();
+	void		vehicle_status_poll();
 
-    orb_advert_t	_v_rates_sp_pub;		/**< rate setpoint publication */
-    orb_advert_t	_actuators_0_pub;		/**< attitude actuator controls publication */
-    orb_advert_t	_controller_status_pub;	/**< controller status publication */
+	/**
+	 * Attitude controller.
+	 */
+	void		control_attitude(float dt);
 
-    orb_id_t _rates_sp_id;	/**< pointer to correct rates setpoint uORB metadata structure */
-    orb_id_t _actuators_id;	/**< pointer to correct actuator controls0 uORB metadata structure */
-
-    bool		_actuators_0_circuit_breaker_enabled;	/**< circuit breaker to suppress output */
-
-    struct control_state_s				_ctrl_state;		/**< control state */
-    struct vehicle_attitude_setpoint_s	_v_att_sp;			/**< vehicle attitude setpoint */
-    struct vehicle_rates_setpoint_s		_v_rates_sp;		/**< vehicle rates setpoint */
-    struct manual_control_setpoint_s	_manual_control_sp;	/**< manual control setpoint */
-    struct vehicle_control_mode_s		_v_control_mode;	/**< vehicle control mode */
-    struct actuator_controls_s			_actuators;			/**< actuator controls */
-    struct actuator_armed_s				_armed;				/**< actuator arming status */
-    struct vehicle_status_s				_vehicle_status;	/**< vehicle status */
-    struct multirotor_motor_limits_s	_motor_limits;		/**< motor limits */
-    struct mc_att_ctrl_status_s 		_controller_status; /**< controller status */
-    struct battery_status_s				_battery_status;	/**< battery status */
-    struct sensor_gyro_s			_sensor_gyro;		/**< gyro data before thermal correctons and ekf bias estimates are applied */
-    struct sensor_correction_s		_sensor_correction;		/**< sensor thermal corrections */
-
-    union {
-        struct {
-            uint16_t motor_pos	: 1; // 0 - true when any motor has saturated in the positive direction
-            uint16_t motor_neg	: 1; // 1 - true when any motor has saturated in the negative direction
-            uint16_t roll_pos	: 1; // 2 - true when a positive roll demand change will increase saturation
-            uint16_t roll_neg	: 1; // 3 - true when a negative roll demand change will increase saturation
-            uint16_t pitch_pos	: 1; // 4 - true when a positive pitch demand change will increase saturation
-            uint16_t pitch_neg	: 1; // 5 - true when a negative pitch demand change will increase saturation
-            uint16_t yaw_pos	: 1; // 6 - true when a positive yaw demand change will increase saturation
-            uint16_t yaw_neg	: 1; // 7 - true when a negative yaw demand change will increase saturation
-            uint16_t thrust_pos	: 1; // 8 - true when a positive thrust demand change will increase saturation
-            uint16_t thrust_neg	: 1; // 9 - true when a negative thrust demand change will increase saturation
-        } flags;
-        uint16_t value;
-    } _saturation_status;
-
-    perf_counter_t	_loop_perf;			/**< loop performance counter */
-    perf_counter_t	_controller_latency_perf;
-
-    math::Vector<3>		_rates_prev;	/**< angular rates on previous step */
-    math::Vector<3>		_rates_sp_prev; /**< previous rates setpoint */
-    math::Vector<3>		_rates_sp;		/**< angular rates setpoint */
-    math::Vector<3>		_rates_int;		/**< angular rates integral error */
-    float				_thrust_sp;		/**< thrust setpoint */
-    math::Vector<3>		_att_control;	/**< attitude control vector */
-    math::Vector<4>		_mixed_att_control;	/**< Mixed attitude control vector */
-
-    math::Matrix<3, 3>  _I;				/**< identity matrix */
-
-    math::Matrix<3, 3>	_board_rotation = {};	/**< rotation matrix for the orientation that the board is mounted */
-
-    struct {
-        param_t roll_p;
-        param_t roll_rate_p;
-        param_t roll_rate_i;
-        param_t roll_rate_integ_lim;
-        param_t roll_rate_d;
-        param_t roll_rate_ff;
-        param_t pitch_p;
-        param_t pitch_rate_p;
-        param_t pitch_rate_i;
-        param_t pitch_rate_integ_lim;
-        param_t pitch_rate_d;
-        param_t pitch_rate_ff;
-        param_t tpa_breakpoint_p;
-        param_t tpa_breakpoint_i;
-        param_t tpa_breakpoint_d;
-        param_t tpa_rate_p;
-        param_t tpa_rate_i;
-        param_t tpa_rate_d;
-        param_t yaw_p;
-        param_t yaw_rate_p;
-        param_t yaw_rate_i;
-        param_t yaw_rate_integ_lim;
-        param_t yaw_rate_d;
-        param_t yaw_rate_ff;
-        param_t yaw_ff;
-        param_t roll_rate_max;
-        param_t pitch_rate_max;
-        param_t yaw_rate_max;
-        param_t yaw_auto_max;
-
-        param_t acro_roll_max;
-        param_t acro_pitch_max;
-        param_t acro_yaw_max;
-        param_t rattitude_thres;
-
-        param_t roll_tc;
-        param_t pitch_tc;
-
-        param_t motion_type;
-        param_t thrust_factor;
-        param_t idle_speed;
-        param_t bat_scale_en;
-
-        param_t board_rotation;
-
-        param_t board_offset[3];
+	/**
+	 * Attitude rates controller.
+	 */
+	void		control_attitude_rates(float dt);
 
 
-    }		_params_handles;		/**< handles for interesting parameters */
-
-    struct {
-        math::Vector<3> att_p;					/**< P gain for angular error */
-        math::Vector<3> rate_p;				/**< P gain for angular rate error */
-        math::Vector<3> rate_i;				/**< I gain for angular rate error */
-        math::Vector<3> rate_int_lim;			/**< integrator state limit for rate loop */
-        math::Vector<3> rate_d;				/**< D gain for angular rate error */
-        math::Vector<3>	rate_ff;			/**< Feedforward gain for desired rates */
-        float yaw_ff;						/**< yaw control feed-forward */
-
-        float tpa_breakpoint_p;				/**< Throttle PID Attenuation breakpoint */
-        float tpa_breakpoint_i;				/**< Throttle PID Attenuation breakpoint */
-        float tpa_breakpoint_d;				/**< Throttle PID Attenuation breakpoint */
-        float tpa_rate_p;					/**< Throttle PID Attenuation slope */
-        float tpa_rate_i;					/**< Throttle PID Attenuation slope */
-        float tpa_rate_d;					/**< Throttle PID Attenuation slope */
-
-        float roll_rate_max;
-        float pitch_rate_max;
-        float yaw_rate_max;
-        float yaw_auto_max;
-        math::Vector<3> dp_rate_max;		/**< attitude rate limits in stabilized modes */
-        math::Vector<3> auto_rate_max;		/**< attitude rate limits in auto modes */
-        math::Vector<3> acro_rate_max;		/**< max attitude rates in acro mode */
-        float rattitude_thres;
-
-        int motion_type;
-        float thrust_factor;
-        float idle_speed;
-
-        int bat_scale_en;
-
-        int board_rotation;
-
-        float board_offset[3];
-
-    }		_params;
-
-    /**
-     * Rotor Mixing scales
-     */
-    static const int _rotor_count{4};
-    static const int _mix_length{5};
-    struct  rotors_vector{
-        float	roll_scale;	/**< scales roll for this rotor */
-        float	pitch_scale;	/**< scales pitch for this rotor */
-        float	yaw_scale;	/**< scales yaw for this rotor */
-        float thrust_scale; /**< scales Thrust for this rotor */
-        float	out_scale;	/**< scales total out for this rotor */
-    } _rotors[_rotor_count];
-
-    /** Mixing Table. Order: Rollscale, PitchScale, YawScale, ThrustScale, OutScale */
-//    static constexpr float _dolphin_x_table[_rotor_count][_mix_length] = {
-//            { -1.000000,  0.707107,  -0.707107, 1.000000, 1.000000 },
-//            { -1.000000,  -0.707107,  0.707107, 1.000000, 1.000000 },
-//            { 1.000000, 0.707107,   0.707107, 1.000000, 1.000000 },
-//            { 1.000000, -0.707107, -0.707107, 1.000000, 1.000000 },
-//    };
-    static constexpr float _dolphin_x_table[_rotor_count][_mix_length] = {
-            { -1.000000,  0.5,  -0.5, 1.000000, 1.000000 },
-            { -1.000000,  -0.5,  0.5, 1.000000, 1.000000 },
-            { 1.000000, 0.5,   0.5, 1.000000, 1.000000 },
-            { 1.000000, -0.5, -0.5, 1.000000, 1.000000 },
-    };
-
-
-
-    /**
-     * Update our local parameter cache.
-     */
-    int			parameters_update();
-
-    /**
-     * Check for parameter update and handle it.
-     */
-    void		parameter_update_poll();
-
-    /**
-     * Check for changes in vehicle control mode.
-     */
-    void		vehicle_control_mode_poll();
-
-    /**
-     * Check for changes in manual inputs.
-     */
-    void		vehicle_manual_poll();
-
-    /**
-     * Check for attitude setpoint updates.
-     */
-    void		vehicle_attitude_setpoint_poll();
-
-    /**
-     * Check for rates setpoint updates.
-     */
-    void		vehicle_rates_setpoint_poll();
-
-    /**
-     * Check for arming status updates.
-     */
-    void		arming_status_poll();
-
-    /**
-     * Attitude controller.
-     */
-    void		control_attitude(float dt);
-
-    /**
-     * Attitude rates controller.
-     */
-    void		control_attitude_rates(float dt);
-
-    /**
-     * Mix Control Output.
-     */
-//    void		mix_control_output(void);
+	/**
+	 * Mix Control Output - make public for testing purposes for now <- TOOD: Fix
+	 */
 public:
-    bool    mix_control_output(math::Vector<3> &att_control, float thrust, math::Vector<4> & mixed_att_control);
+	bool    mix_control_output(math::Vector<3> &att_control, float thrust, math::Vector<4> & mixed_att_control);
 private:
-    /**
-     * Throttle PID attenuation.
-     */
-    math::Vector<3> pid_attenuations(float tpa_breakpoint, float tpa_rate);
 
-    /**
-     * Check for vehicle status updates.
-     */
-    void		vehicle_status_poll();
+	/**
+	 * Throttle PID attenuation.
+	 */
+	matrix::Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
 
-    /**
-     * Check for vehicle motor limits status.
-     */
-    void		vehicle_motor_limits_poll();
 
-    /**
-     * Check for battery status updates.
-     */
-    void		battery_status_poll();
+	int		_v_att_sub{-1};			/**< vehicle attitude subscription */
+	int		_v_att_sp_sub{-1};		/**< vehicle attitude setpoint subscription */
+	int		_v_rates_sp_sub{-1};		/**< vehicle rates setpoint subscription */
+	int		_v_control_mode_sub{-1};	/**< vehicle control mode subscription */
+	int		_params_sub{-1};		/**< parameter updates subscription */
+	int		_manual_control_sp_sub{-1};	/**< manual control setpoint subscription */
+	int		_vehicle_status_sub{-1};	/**< vehicle status subscription */
+	int		_motor_limits_sub{-1};		/**< motor limits subscription */
+	int		_battery_status_sub{-1};	/**< battery status subscription */
+	int		_sensor_gyro_sub[MAX_GYRO_COUNT];	/**< gyro data subscription */
+	int		_sensor_correction_sub{-1};	/**< sensor thermal correction subscription */
+	int		_sensor_bias_sub{-1};		/**< sensor in-run bias correction subscription */
 
-    /**
-     * Check for control state updates.
-     */
-    void		control_state_poll();
+	unsigned _gyro_count{1};
+	int _selected_gyro{0};
 
-    /**
-     * Check for sensor thermal correction updates.
-     */
-    void		sensor_correction_poll();
+	orb_advert_t	_v_rates_sp_pub{nullptr};		/**< rate setpoint publication */
+	orb_advert_t	_actuators_0_pub{nullptr};		/**< attitude actuator controls publication */
+	orb_advert_t	_controller_status_pub{nullptr};	/**< controller status publication */
 
-    /**
-     * Shim for calling task_main from task_create.
-     */
-    static void	task_main_trampoline(int argc, char *argv[]);
+	orb_id_t _rates_sp_id{nullptr};		/**< pointer to correct rates setpoint uORB metadata structure */
+	orb_id_t _actuators_id{nullptr};	/**< pointer to correct actuator controls0 uORB metadata structure */
 
-    /**
-     * Main attitude control task.
-     */
-    void		task_main();
+	bool		_actuators_0_circuit_breaker_enabled{false};	/**< circuit breaker to suppress output */
+
+	struct vehicle_attitude_s		_v_att {};		/**< vehicle attitude */
+	struct vehicle_attitude_setpoint_s	_v_att_sp {};		/**< vehicle attitude setpoint */
+	struct vehicle_rates_setpoint_s		_v_rates_sp {};		/**< vehicle rates setpoint */
+	struct manual_control_setpoint_s	_manual_control_sp {};	/**< manual control setpoint */
+	struct vehicle_control_mode_s		_v_control_mode {};	/**< vehicle control mode */
+	struct actuator_controls_s		_actuators {};		/**< actuator controls */
+	struct vehicle_status_s			_vehicle_status {};	/**< vehicle status */
+	struct battery_status_s			_battery_status {};	/**< battery status */
+	struct sensor_gyro_s			_sensor_gyro {};	/**< gyro data before thermal correctons and ekf bias estimates are applied */
+	struct sensor_correction_s		_sensor_correction {};	/**< sensor thermal corrections */
+	struct sensor_bias_s			_sensor_bias {};	/**< sensor in-run bias corrections */
+
+	MultirotorMixer::saturation_status _saturation_status{};
+
+	perf_counter_t	_loop_perf;			/**< loop performance counter */
+
+	math::LowPassFilter2p _lp_filters_d[3];                      /**< low-pass filters for D-term (roll, pitch & yaw) */
+	static constexpr const float initial_update_rate_hz = 250.f; /**< loop update rate used for initialization */
+	float _loop_update_rate_hz{initial_update_rate_hz};          /**< current rate-controller loop update rate in [Hz] */
+
+	matrix::Vector3f _rates_prev;			/**< angular rates on previous step */
+	matrix::Vector3f _rates_prev_filtered;		/**< angular rates on previous step (low-pass filtered) */
+	matrix::Vector3f _rates_sp;			/**< angular rates setpoint */
+	matrix::Vector3f _rates_int;			/**< angular rates integral error */
+	float _thrust_sp;				/**< thrust setpoint */
+	matrix::Vector3f _mixed_att_control; 	/**< Mixed attitude control vector */
+	matrix::Vector3f _att_control;			/**< attitude control vector */
+
+	matrix::Dcmf _board_rotation;			/**< rotation matrix for the orientation that the board is mounted */
+
+	DEFINE_PARAMETERS(
+		(ParamFloat<px4::params::DP_ROLL_P>) _roll_p,
+		(ParamFloat<px4::params::DP_ROLLRATE_P>) _roll_rate_p,
+		(ParamFloat<px4::params::DP_ROLLRATE_I>) _roll_rate_i,
+		(ParamFloat<px4::params::DP_RR_INT_LIM>) _roll_rate_integ_lim,
+		(ParamFloat<px4::params::DP_ROLLRATE_D>) _roll_rate_d,
+		(ParamFloat<px4::params::DP_ROLLRATE_FF>) _roll_rate_ff,
+
+		(ParamFloat<px4::params::DP_PITCH_P>) _pitch_p,
+		(ParamFloat<px4::params::DP_PITCHRATE_P>) _pitch_rate_p,
+		(ParamFloat<px4::params::DP_PITCHRATE_I>) _pitch_rate_i,
+		(ParamFloat<px4::params::DP_PR_INT_LIM>) _pitch_rate_integ_lim,
+		(ParamFloat<px4::params::DP_PITCHRATE_D>) _pitch_rate_d,
+		(ParamFloat<px4::params::DP_PITCHRATE_FF>) _pitch_rate_ff,
+
+		(ParamFloat<px4::params::DP_YAW_P>) _yaw_p,
+		(ParamFloat<px4::params::DP_YAWRATE_P>) _yaw_rate_p,
+		(ParamFloat<px4::params::DP_YAWRATE_I>) _yaw_rate_i,
+		(ParamFloat<px4::params::DP_YR_INT_LIM>) _yaw_rate_integ_lim,
+		(ParamFloat<px4::params::DP_YAWRATE_D>) _yaw_rate_d,
+		(ParamFloat<px4::params::DP_YAWRATE_FF>) _yaw_rate_ff,
+
+		(ParamFloat<px4::params::DP_YAW_FF>) _yaw_ff,					/**< yaw control feed-forward */
+
+		(ParamFloat<px4::params::DP_DTERM_CUTOFF>) _d_term_cutoff_freq,			/**< Cutoff frequency for the D-term filter */
+
+		(ParamFloat<px4::params::DP_TPA_BREAK_P>) _tpa_breakpoint_p,			/**< Throttle PID Attenuation breakpoint */
+		(ParamFloat<px4::params::DP_TPA_BREAK_I>) _tpa_breakpoint_i,			/**< Throttle PID Attenuation breakpoint */
+		(ParamFloat<px4::params::DP_TPA_BREAK_D>) _tpa_breakpoint_d,			/**< Throttle PID Attenuation breakpoint */
+		(ParamFloat<px4::params::DP_TPA_RATE_P>) _tpa_rate_p,				/**< Throttle PID Attenuation slope */
+		(ParamFloat<px4::params::DP_TPA_RATE_I>) _tpa_rate_i,				/**< Throttle PID Attenuation slope */
+		(ParamFloat<px4::params::DP_TPA_RATE_D>) _tpa_rate_d,				/**< Throttle PID Attenuation slope */
+
+		(ParamFloat<px4::params::DP_ROLLRATE_MAX>) _roll_rate_max,
+		(ParamFloat<px4::params::DP_PITCHRATE_MAX>) _pitch_rate_max,
+		(ParamFloat<px4::params::DP_YAWRATE_MAX>) _yaw_rate_max,
+		(ParamFloat<px4::params::DP_YAWRAUTO_MAX>) _yaw_auto_max,
+
+		(ParamFloat<px4::params::DP_ACRO_R_MAX>) _acro_roll_max,
+		(ParamFloat<px4::params::DP_ACRO_P_MAX>) _acro_pitch_max,
+		(ParamFloat<px4::params::DP_ACRO_Y_MAX>) _acro_yaw_max,
+//		(ParamFloat<px4::params::DP_ACRO_EXPO>) _acro_expo_rp,				/**< expo stick curve shape (roll & pitch) */
+//		(ParamFloat<px4::params::DP_ACRO_EXPO_Y>) _acro_expo_y,				/**< expo stick curve shape (yaw) */
+//		(ParamFloat<px4::params::DP_ACRO_SUPEXPO>) _acro_superexpo_rp,			/**< superexpo stick curve shape (roll & pitch) */
+//		(ParamFloat<px4::params::DP_ACRO_SUPEXPOY>) _acro_superexpo_y,			/**< superexpo stick curve shape (yaw) */
+
+		(ParamFloat<px4::params::DP_RATT_TH>) _rattitude_thres,
+
+		(ParamBool<px4::params::DP_BAT_SCALE_EN>) _bat_scale_en,
+
+		(ParamInt<px4::params::SENS_BOARD_ROT>) _board_rotation_param,
+
+		(ParamFloat<px4::params::SENS_BOARD_X_OFF>) _board_offset_x,
+		(ParamFloat<px4::params::SENS_BOARD_Y_OFF>) _board_offset_y,
+		(ParamFloat<px4::params::SENS_BOARD_Z_OFF>) _board_offset_z,
+
+//		(ParamFloat<px4::params::VT_WV_YAWR_SCL>) _vtol_wv_yaw_rate_scale		/**< Scale value [0, 1] for yaw rate setpoint  */
+	)
+
+	matrix::Vector3f _attitude_p;		/**< P gain for attitude control */
+	matrix::Vector3f _rate_p;		/**< P gain for angular rate error */
+	matrix::Vector3f _rate_i;		/**< I gain for angular rate error */
+	matrix::Vector3f _rate_int_lim;		/**< integrator state limit for rate loop */
+	matrix::Vector3f _rate_d;		/**< D gain for angular rate error */
+	matrix::Vector3f _rate_ff;		/**< Feedforward gain for desired rates */
+
+	matrix::Vector3f _dp_rate_max;		/**< attitude rate limits in stabilized modes */
+	matrix::Vector3f _auto_rate_max;	/**< attitude rate limits in auto modes */
+	matrix::Vector3f _acro_rate_max;	/**< max attitude rates in acro mode */
 
 };
+
