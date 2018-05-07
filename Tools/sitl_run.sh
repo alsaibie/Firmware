@@ -116,6 +116,16 @@ then
 		echo "You need to have gazebo simulator installed!"
 		exit 1
 	fi
+
+# add uwsim dolphin
+elif [ "$program" == "uwsim" ] && [ ! -n "$no_sim" ]
+then
+	echo "Starting UWsim"
+	# Source uwsim space
+
+	# Launch OSG
+
+	# Check if we need to creat a param file to allow user to change parameters
 fi
 
 cd $working_dir
