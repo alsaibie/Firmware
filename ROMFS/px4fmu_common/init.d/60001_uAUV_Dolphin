@@ -1,0 +1,27 @@
+#!nsh
+#
+# @name Dolphin Prototype a
+#
+# @class Submarine
+#
+# @type Submarine
+#
+# @output MAIN1 pass-through of control group 0, channel 0
+# @output MAIN2 pass-through of control group 0, channel 1
+# @output MAIN3 pass-through of control group 0, channel 2
+# @output MAIN4 pass-through of control group 0, channel 3
+# @maintainer Ali AlSaibie <ali@alsaibie.com>
+
+sh /etc/init.d/rc.uAUV_dolphin_defaults
+
+	
+#choose a mixer, for uAUV control we need a plain passthrough to the servos, for now
+set MIXER IO_pass
+
+# no safety switch needed
+param set CBRK_IO_SAFETY    22027
+#don't arm nothrottle attitude channels if prearmed (This is included in circuit_breaker.h and implemented in fmu.cpp)
+
+param set CBRK_DISABLE_IO_ON_PREARM 124578
+#no Airspeed Sensor Needed
+param set CBRK_AIRSPD_CHK 	162128

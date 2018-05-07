@@ -1,0 +1,53 @@
+#!nsh
+#
+# Dolphin Default Configuration. Gets called by 60001_uAUV_Dolphin
+#
+# Ali AlSaibie <ali@alsaibie.com>
+#
+
+set VEHICLE_TYPE uAUV
+
+if [ $AUTOCNF == yes ]
+then
+	param set PE_VELNE_NOISE 0.5
+	param set PE_VELD_NOISE 0.35
+	param set PE_POSNE_NOISE 0.5
+	param set PE_POSD_NOISE 1.25
+
+	param set NAV_ACC_RAD 2.0
+
+    param set DP_ROLL_P 8.0
+    param set DP_ROLLRATE_P 0.19
+    param set DP_ROLLRATE_I 0.1
+    param set DP_ROLLRATE_D 0.0055
+    param set DP_PITCH_P 8.0
+    param set DP_PITCHRATE_P 0.24
+    param set DP_PITCHRATE_I 0.1
+    param set DP_PITCHRATE_D 0.0065
+    param set DP_YAW_P 4.0
+    param set DP_YAWRATE_P 0.2
+    param set DP_YAWRATE_I 0.1
+    param set DP_YAWRATE_D 0.0
+    param set DP_YAW_FF 0.5
+    param set DP_ROLLRATE_MAX 720.0
+    param set DP_PITCHRATE_MAX 720.0
+    param set DP_YAWRATE_MAX 400.0
+    param set DP_ACRO_R_MAX 360.0
+    param set DP_ACRO_P_MAX 360.0
+
+    param set DPC_THR_MIN 0.06
+    param set DPC_MANTHR_MIN 0.06
+
+    param set ATT_BIAS_MAX 0.0
+
+    param set PWM_DISARMED 1500
+
+    # PWM range
+    param set PWM_MIN 1100
+    param set PWM_MAX 1900
+fi
+
+set PWM_RATE 400
+set PWM_OUT 1234
+
+
