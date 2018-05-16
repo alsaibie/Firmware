@@ -37,7 +37,7 @@
  *
  * All the acknowledgments and credits for the mc and fw wing app are reported in those files.
  *
- * @author Ali AlSaibie <alsaibie@gatech.edu>
+ * @author Ali AlSaibie <ali@alsaibie.com>
  *
  */
 
@@ -128,7 +128,6 @@ private:
 	 */
 	void		control_attitude_rates(float dt);
 
-
 	/**
 	 * Mix Control Output - make public for testing purposes for now <- TOOD: Fix
 	 */
@@ -142,11 +141,11 @@ private:
 	matrix::Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
 
 
-	int		_v_att_sub{-1};			/**< vehicle attitude subscription */
-	int		_v_att_sp_sub{-1};		/**< vehicle attitude setpoint subscription */
+	int		_v_att_sub{-1};			    /**< vehicle attitude subscription */
+	int		_v_att_sp_sub{-1};		    /**< vehicle attitude setpoint subscription */
 	int		_v_rates_sp_sub{-1};		/**< vehicle rates setpoint subscription */
 	int		_v_control_mode_sub{-1};	/**< vehicle control mode subscription */
-	int		_params_sub{-1};		/**< parameter updates subscription */
+	int		_params_sub{-1};		    /**< parameter updates subscription */
 	int		_manual_control_sp_sub{-1};	/**< manual control setpoint subscription */
 	int		_vehicle_status_sub{-1};	/**< vehicle status subscription */
 	int		_motor_limits_sub{-1};		/**< motor limits subscription */
@@ -167,17 +166,17 @@ private:
 
 	bool		_actuators_0_circuit_breaker_enabled{false};	/**< circuit breaker to suppress output */
 
-	struct vehicle_attitude_s		_v_att {};		/**< vehicle attitude */
-	struct vehicle_attitude_setpoint_s	_v_att_sp {};		/**< vehicle attitude setpoint */
-	struct vehicle_rates_setpoint_s		_v_rates_sp {};		/**< vehicle rates setpoint */
+	struct vehicle_attitude_s		    _v_att {};		        /**< vehicle attitude */
+	struct vehicle_attitude_setpoint_s	_v_att_sp {};		    /**< vehicle attitude setpoint */
+	struct vehicle_rates_setpoint_s		_v_rates_sp {};		    /**< vehicle rates setpoint */
 	struct manual_control_setpoint_s	_manual_control_sp {};	/**< manual control setpoint */
-	struct vehicle_control_mode_s		_v_control_mode {};	/**< vehicle control mode */
-	struct actuator_controls_s		_actuators {};		/**< actuator controls */
-	struct vehicle_status_s			_vehicle_status {};	/**< vehicle status */
-	struct battery_status_s			_battery_status {};	/**< battery status */
-	struct sensor_gyro_s			_sensor_gyro {};	/**< gyro data before thermal correctons and ekf bias estimates are applied */
-	struct sensor_correction_s		_sensor_correction {};	/**< sensor thermal corrections */
-	struct sensor_bias_s			_sensor_bias {};	/**< sensor in-run bias corrections */
+	struct vehicle_control_mode_s		_v_control_mode {};	    /**< vehicle control mode */
+	struct actuator_controls_s		    _actuators {};		    /**< actuator controls */
+	struct vehicle_status_s			    _vehicle_status {};	    /**< vehicle status */
+	struct battery_status_s			    _battery_status {};	    /**< battery status */
+	struct sensor_gyro_s			    _sensor_gyro {};	    /**< gyro data before thermal correctons and ekf bias estimates are applied */
+	struct sensor_correction_s		    _sensor_correction {};	/**< sensor thermal corrections */
+	struct sensor_bias_s			    _sensor_bias {};	    /**< sensor in-run bias corrections */
 
 	MultirotorMixer::saturation_status _saturation_status{};
 
@@ -187,15 +186,15 @@ private:
 	static constexpr const float initial_update_rate_hz = 250.f; /**< loop update rate used for initialization */
 	float _loop_update_rate_hz{initial_update_rate_hz};          /**< current rate-controller loop update rate in [Hz] */
 
-	matrix::Vector3f _rates_prev;			/**< angular rates on previous step */
+	matrix::Vector3f _rates_prev;			    /**< angular rates on previous step */
 	matrix::Vector3f _rates_prev_filtered;		/**< angular rates on previous step (low-pass filtered) */
-	matrix::Vector3f _rates_sp;			/**< angular rates setpoint */
-	matrix::Vector3f _rates_int;			/**< angular rates integral error */
-	float _thrust_sp;				/**< thrust setpoint */
-	matrix::Vector3f _mixed_att_control; 	/**< Mixed attitude control vector */
-	matrix::Vector3f _att_control;			/**< attitude control vector */
+	matrix::Vector3f _rates_sp;			        /**< angular rates setpoint */
+	matrix::Vector3f _rates_int;			    /**< angular rates integral error */
+float _thrust_sp;				                /**< thrust setpoint */
+	matrix::Vector3f _mixed_att_control; 	    /**< Mixed attitude control vector */
+	matrix::Vector3f _att_control;			    /**< attitude control vector */
 
-	matrix::Dcmf _board_rotation;			/**< rotation matrix for the orientation that the board is mounted */
+	matrix::Dcmf _board_rotation;			    /**< rotation matrix for the orientation that the board is mounted */
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::DP_ROLL_P>) _roll_p,
@@ -219,13 +218,13 @@ private:
 		(ParamFloat<px4::params::DP_YAWRATE_D>) _yaw_rate_d,
 		(ParamFloat<px4::params::DP_YAWRATE_FF>) _yaw_rate_ff,
 
-		(ParamFloat<px4::params::DP_YAW_FF>) _yaw_ff,					/**< yaw control feed-forward */
+		(ParamFloat<px4::params::DP_YAW_FF>) _yaw_ff,					    /**< yaw control feed-forward */
 
-		(ParamFloat<px4::params::DP_DTERM_CUTOFF>) _d_term_cutoff_freq,			/**< Cutoff frequency for the D-term filter */
+		(ParamFloat<px4::params::DP_DTERM_CUTOFF>) _d_term_cutoff_freq,		/**< Cutoff frequency for the D-term filter */
 
-		(ParamFloat<px4::params::DP_TPA_BREAK_P>) _tpa_breakpoint_p,			/**< Throttle PID Attenuation breakpoint */
-		(ParamFloat<px4::params::DP_TPA_BREAK_I>) _tpa_breakpoint_i,			/**< Throttle PID Attenuation breakpoint */
-		(ParamFloat<px4::params::DP_TPA_BREAK_D>) _tpa_breakpoint_d,			/**< Throttle PID Attenuation breakpoint */
+		(ParamFloat<px4::params::DP_TPA_BREAK_P>) _tpa_breakpoint_p,		/**< Throttle PID Attenuation breakpoint */
+		(ParamFloat<px4::params::DP_TPA_BREAK_I>) _tpa_breakpoint_i,		/**< Throttle PID Attenuation breakpoint */
+		(ParamFloat<px4::params::DP_TPA_BREAK_D>) _tpa_breakpoint_d,		/**< Throttle PID Attenuation breakpoint */
 		(ParamFloat<px4::params::DP_TPA_RATE_P>) _tpa_rate_p,				/**< Throttle PID Attenuation slope */
 		(ParamFloat<px4::params::DP_TPA_RATE_I>) _tpa_rate_i,				/**< Throttle PID Attenuation slope */
 		(ParamFloat<px4::params::DP_TPA_RATE_D>) _tpa_rate_d,				/**< Throttle PID Attenuation slope */
@@ -256,10 +255,10 @@ private:
 //		(ParamFloat<px4::params::VT_WV_YAWR_SCL>) _vtol_wv_yaw_rate_scale		/**< Scale value [0, 1] for yaw rate setpoint  */
 	)
 
-	matrix::Vector3f _attitude_p;		/**< P gain for attitude control */
+	matrix::Vector3f _attitude_p;	/**< P gain for attitude control */
 	matrix::Vector3f _rate_p;		/**< P gain for angular rate error */
 	matrix::Vector3f _rate_i;		/**< I gain for angular rate error */
-	matrix::Vector3f _rate_int_lim;		/**< integrator state limit for rate loop */
+	matrix::Vector3f _rate_int_lim;	/**< integrator state limit for rate loop */
 	matrix::Vector3f _rate_d;		/**< D gain for angular rate error */
 	matrix::Vector3f _rate_ff;		/**< Feedforward gain for desired rates */
 

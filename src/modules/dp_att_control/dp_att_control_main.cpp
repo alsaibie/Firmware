@@ -382,9 +382,9 @@ DolphinAttitudeControl::control_attitude(float dt)
 
 	/* prepare yaw weight from the ratio between roll/pitch and yaw gains */
 	Vector3f attitude_gain = _attitude_p;
-	const float roll_pitch_gain = (attitude_gain(0) + attitude_gain(1)) / 2.f;
-	const float yaw_w = math::constrain(attitude_gain(2) / roll_pitch_gain, 0.f, 1.f);
-	attitude_gain(2) = roll_pitch_gain;
+	const float pitch_yaw_gain = (attitude_gain(1) + attitude_gain(2)) / 2.f;
+	const float roll_w = math::constrain(attitude_gain(2) / pitch_yaw_gain, 0.f, 1.f);
+	attitude_gain(0) = pitch_yaw_gain;
 
 	/* get estimated and desired vehicle attitude */
 	Quatf q(_v_att.q);
@@ -394,15 +394,13 @@ DolphinAttitudeControl::control_attitude(float dt)
 	q.normalize();
 	qd.normalize();
 
-	/* calculate reduced desired attitude neglecting vehicle's yaw to prioritize roll and pitch */
-	Vector3f e_z = q.dcm_z();
-	Vector3f e_z_d = qd.dcm_z();
+	/* calculate reduced desired attitude neglecting vehicle's roll to prioritize pitch and yaw */
+	Vector3f e_z = q.dcm_x();
+	Vector3f e_z_d = qd.dcm_x();
 	Quatf qd_red(e_z, e_z_d);
 
-	if (abs(qd_red(1)) > (1.f - 1e-5f) || abs(qd_red(2)) > (1.f - 1e-5f)) {
-		/* In the infinitesimal corner case where the vehicle and thrust have the completely opposite direction,
-		 * full attitude control anyways generates no yaw input and directly takes the combination of
-		 * roll and pitch leading to the correct desired yaw. Ignoring this case would still be totally safe and stable. */
+	if (abs(qd_red(2)) > (1.f - 1e-5f) || abs(qd_red(3)) > (1.f - 1e-5f)) {
+		/* In the infinitesimal corner case where the vehicle and thrust have the completely opposite direction */
 		qd_red = qd;
 
 	} else {
@@ -411,12 +409,12 @@ DolphinAttitudeControl::control_attitude(float dt)
 	}
 
 	/* mix full and reduced desired attitude */
-	Quatf q_mix = qd_red.inversed() * qd;
+	Quatf q_mix = qd * qd_red.inversed();
 	q_mix *= math::signNoZero(q_mix(0));
 	/* catch numerical problems with the domain of acosf and asinf */
 	q_mix(0) = math::constrain(q_mix(0), -1.f, 1.f);
-	q_mix(3) = math::constrain(q_mix(3), -1.f, 1.f);
-	qd = qd_red * Quatf(cosf(yaw_w * acosf(q_mix(0))), 0, 0, sinf(yaw_w * asinf(q_mix(3))));
+	q_mix(1) = math::constrain(q_mix(1), -1.f, 1.f);
+	qd = Quatf(cosf(roll_w * acosf(q_mix(0))), sinf(roll_w * asinf(q_mix(1))), 0, 0) * qd_red;
 
 	/* quaternion attitude control law, qe is rotation from q to qd */
 	Quatf qe = q.inversed() * qd;
@@ -428,13 +426,13 @@ DolphinAttitudeControl::control_attitude(float dt)
 	/* calculate angular rates setpoint */
 	_rates_sp = eq.emult(attitude_gain);
 
-	/* Feed forward the yaw setpoint rate. We need to apply the yaw rate in the body frame.
-	 * We infer the body z axis by taking the last column of R.transposed (== q.inversed)
-	 * because it's the rotation axis for body yaw and multiply it by the rate and gain. */
-	Vector3f yaw_feedforward_rate = q.inversed().dcm_z();
-	yaw_feedforward_rate *= _v_att_sp.yaw_sp_move_rate * _yaw_ff.get();
-	_rates_sp += yaw_feedforward_rate;
-
+	/* Feed forward the roll setpoint rate. We need to apply the roll rate in the body frame.
+	 * We infer the body x axis by taking the first column of R.transposed (== q.inversed)
+	 * because it's the rotation axis for body roll and multiply it by the rate and gain. */
+	// TODO: Change this to full FF model based control.
+	Vector3f roll_feedforward_rate = q.inversed().dcm_x();
+	roll_feedforward_rate *= _v_att_sp.roll_sp_move_rate * _roll_rate_ff.get();
+	_rates_sp += roll_feedforward_rate;
 
 	/* limit rates */
 	for (int i = 0; i < 3; i++) {
