@@ -18,6 +18,15 @@
     <!-- PX4 SITL -->
     <node name="sitl" pkg="px4" type="px4" output="screen" args="$(find px4) $(arg rcS)"/>
 
+    <!-- MAVROS -->
+    <!--<arg name="fcu_url" default="udp://:14540@localhost:14557"/>-->
+    <!--<include file="$(find mavros)/launch/px4.launch">-->
+        <!--<arg name="fcu_url" value="$(arg fcu_url)"/>-->
+        <!--<arg name="gcs_url" value=""/>-->
+    <!--</include>-->
+
     <!-- UWSim -->
+    <!-- uwsim Node -->
+    <include file="$(find uwsim_sitl)/launch/uwsim_sitl.launch"/>
 
 </launch>
