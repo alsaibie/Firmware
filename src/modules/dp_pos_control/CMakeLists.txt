@@ -30,18 +30,15 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 ############################################################################
-include_directories(build_px4fmu-v4_dolphin/topics_temporary_header/)
+#include_directories(build_px4fmu-v4_default/topics_temporary_header/)
 px4_add_module(
 	MODULE modules__dp_pos_control
 	MAIN dp_pos_control
 	COMPILE_FLAGS
 	STACK_MAIN 1200
 	SRCS
-		dp_pos_control.cpp
+        dp_pos_control_main.cpp
 	DEPENDS
 		platforms__common
-#		git_ecl
-#		lib__external_lgpl
-#		lib__ecl
 	)
 # vim: set noet ft=cmake fenc=utf-8 ff=unix :

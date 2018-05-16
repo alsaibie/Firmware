@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2013-2017 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2017 Ali AlSaibie. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -34,12 +34,7 @@
 /**
  * @file dp_pos_control_params.c
  *
- * Parameters defined by the position control task for dolphin
- * Adopted from  gnd_pos_control_params.c
- *
- * All the ackowledgments and credits for the fw wing app are reported in those files.
- *
- * @author Ali AlSaibie <alsaibie@gatech.edu>
+ * @author Ali AlSaibie <ali@alsaibie.com>
  */
 
 /*

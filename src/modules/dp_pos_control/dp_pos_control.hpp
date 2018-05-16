@@ -29,9 +29,8 @@
  ****************************************************************************/
 
 /**
- * @file 
- * 
- * starting template adopted from gnd_pos_control
+
+ *
  * @author Ali AlSaibie
  */
 #pragma once
@@ -40,157 +39,132 @@
 #include <px4_defines.h>
 #include <px4_posix.h>
 #include <px4_tasks.h>
-
+#include <px4_module.h>
+#include <px4_module_params.h>
 #include <cfloat>
 
 #include <drivers/drv_hrt.h>
-#include <ecl/l1/ecl_l1_pos_controller.h>
-#include <geo/geo.h>
 #include <mathlib/mathlib.h>
-#include <systemlib/perf_counter.h>
+#include <perf/perf_counter.h>
 #include <systemlib/pid/pid.h>
-#include <uORB/topics/fw_pos_ctrl_status.h>
-#include <uORB/topics/control_state.h>
-#include <uORB/topics/manual_control_setpoint.h>
+
 #include <uORB/topics/parameter_update.h>
-#include <uORB/topics/position_setpoint_triplet.h>
+#include <uORB/topics/battery_status.h>
+#include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_control_mode.h>
-#include <uORB/topics/vehicle_global_position.h>
+#include <uORB/topics/manual_control_setpoint.h>
+#include <uORB/topics/vehicle_rates_setpoint.h>
+#include <uORB/topics/vehicle_status.h>
+#include <uORB/topics/vehicle_local_position.h>
 #include <uORB/uORB.h>
+
 #include <controllib/blocks.hpp>
 #include <controllib/block/BlockParam.hpp>
 
 using matrix::Dcmf;
 
-class DolphinPositionControl : public control::SuperBlock
+
+
+
+/**
+ * Dolphin position control app start / stop handling function
+ * TODO: Write up a description of the inputs and outputs here in brief
+ */
+extern "C" __EXPORT int dp_pos_control_main(int argc, char *argv[]);
+
+class DolphinPositionControl : public ModuleBase<DolphinPositionControl>, public ModuleParams
 {
 public:
     DolphinPositionControl();
-    ~DolphinPositionControl();
-    DolphinPositionControl(const DolphinPositionControl &) = delete;
-    DolphinPositionControl operator=(const DolphinPositionControl &other) = delete;
 
-    /**
-     * Start the sensors task.
-     *
-     * @return	OK on success.
-     */
-    static int	start();
+    virtual ~DolphinPositionControl() = default;
 
-    /**
-     * Task status
-     *
-     * @return	true if the mainloop is running
-     */
-    bool		task_running() { return _task_running; }
+    /** @see ModuleBase */
+    static int task_spawn(int argc, char *argv[]);
+
+    /** @see ModuleBase */
+    static DolphinPositionControl *instantiate(int argc, char *argv[]);
+
+    /** @see ModuleBase */
+    static int custom_command(int argc, char *argv[]);
+
+    /** @see ModuleBase */
+    static int print_usage(const char *reason = nullptr);
+
+    /** @see ModuleBase::run() */
+    void run() override;
 
 private:
-    orb_advert_t	_attitude_sp_pub{nullptr};		/**< attitude setpoint */
-    orb_advert_t	_dp_pos_ctrl_status_pub{nullptr};		/**< navigation capabilities publication */
 
-    bool		_task_should_exit{false};		/**< if true, sensor task should exit */
-    bool		_task_running{false};			/**< if true, task is running in its mainloop */
+    /**
+     * Position controllers
+     */
+    void		control_position_attitude(float dt);
+    void		control_position_full(float dt);
 
-    int		_control_mode_sub{-1};		/**< control mode subscription */
-    int		_ctrl_state_sub{-1};			/**< control state subscription */
-    int		_global_pos_sub{-1};
-    int		_manual_control_sub{-1};		/**< notification of manual control updates */
-    int		_params_sub{-1};			/**< notification of parameter updates */
-    int		_pos_sp_triplet_sub{-1};
+    /**
+     * initialize some vectors/matrices from parameters
+     */
+    void		parameters_updated();
 
-    control_state_s				_ctrl_state{};			/**< control state */
-    fw_pos_ctrl_status_s			_dp_pos_ctrl_status{};		/**< navigation capabilities */
-    manual_control_setpoint_s		_manual{};			/**< r/c channel data */
-    position_setpoint_triplet_s		_pos_sp_triplet{};		/**< triplet of mission items */
-    vehicle_attitude_setpoint_s		_att_sp{};			/**< vehicle attitude setpoint */
-    vehicle_control_mode_s			_control_mode{};			/**< control mode */
-    vehicle_global_position_s		_global_pos{};			/**< global vehicle position */
+    /**
+     * Check for parameter update and handle it.
+     */
+    void		parameter_update_poll();
+    void		battery_status_poll();
+    void		vehicle_attitude_poll();
+    void		vehicle_attitude_setpoint_poll();
+    void		vehicle_control_mode_poll();
+    void		vehicle_manual_poll();
+    void		vehicle_rates_setpoint_poll();
+    void		vehicle_status_poll();
+
+private:
+
+    /**
+     * Throttle PID attenuation.
+     */
+    matrix::Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
+
+
+    int		_params_sub{-1};		    /**< parameter updates subscription */
+    int		_battery_status_sub{-1};	/**< battery status subscription */
+    int		_v_att_sub{-1};			    /**< vehicle attitude subscription */
+    int		_v_att_sp_sub{-1};		    /**< vehicle attitude setpoint subscription */
+    int		_v_control_mode_sub{-1};	/**< vehicle control mode subscription */
+    int		_manual_control_sp_sub{-1};	/**< manual control setpoint subscription */
+    int		_v_rates_sp_sub{-1};		/**< vehicle rates setpoint subscription */
+    int		_vehicle_status_sub{-1};	/**< vehicle status subscription */
+    int		_local_pos_sub{-1};			    /**< vehicle local position */
+
+
+    orb_advert_t	_v_att_sp_pub{nullptr};		/**< attitude setpoint publication */
+//    orb_advert_t	_controller_status_pub{nullptr};	/**< controller status publication */
+
+    orb_id_t _att_sp_id{nullptr};		/**< pointer to correct rates setpoint uORB metadata structure */
+
+    bool		_actuators_0_circuit_breaker_enabled{false};	/**< circuit breaker to suppress output */
+
+    struct battery_status_s			    _battery_status {};	/**< battery status */
+    struct vehicle_attitude_s		    _v_att {};		        /**< vehicle attitude */
+    struct vehicle_attitude_setpoint_s	_v_att_sp {};		    /**< vehicle attitude setpoint */
+    struct vehicle_control_mode_s		_v_control_mode {};	    /**< vehicle control mode */
+    struct manual_control_setpoint_s	_manual_control_sp {};	/**< manual control setpoint */
+    struct vehicle_rates_setpoint_s		_v_rates_sp {};		    /**< vehicle rates setpoint */
+    struct vehicle_status_s			    _vehicle_status {};	    /**< vehicle status */
+    struct vehicle_local_position_s		_local_pos {};		    /**< vehicle local position */
 
     perf_counter_t	_loop_perf;			/**< loop performance counter */
 
-    hrt_abstime _control_position_last_called{0}; 	/**<last call of control_position  */
+    static constexpr const float initial_update_rate_hz = 250.f; /**< loop update rate used for initialization */
+    float _loop_update_rate_hz{initial_update_rate_hz};          /**< current rate-controller loop update rate in [Hz] */
 
-
-
-    bool _reset_pos_sp;
-    bool _reset_alt_sp;
-    bool _do_reset_alt_pos_flag;
-    bool _mode_auto;
-    bool _pos_hold_engaged;
-    bool _alt_hold_engaged;
-    bool _run_pos_control;
-    bool _run_alt_control;
-    bool _reset_yaw_sp;
-
-    float _yaw;
-    /* Pid controller for the speed. Here we assume we can control airspeed but the control variable is actually on
-     the throttle. For now just assuming a proportional scaler between controlled airspeed and throttle output.*/
-    PID_t _speed_ctrl{};
-
-    // estimator reset counters
-    uint8_t _pos_reset_counter{0};		// captures the number of times the estimator has reset the horizontal position
-
-    ECL_L1_Pos_Controller				_dp_control;
-
-    // TODO: use this to my case - expand later,
-    enum UGV_POSCTRL_MODE {
-        AUV_POSCTRL_MODE_AUTO,
-        AUV_POSCTRL_MODE_OTHER
-    } _control_mode_current{AUV_POSCTRL_MODE_OTHER};			///< used to check the mode in the last control loop iteration. Use to check if the last iteration was in the same mode.
-
-    struct {
-        int32_t speed_control_mode;
-        float throttle_min;
-        float throttle_max;
-        float throttle_idle;
-        float throttle_cruise;
-        float throttle_slew_max;
-
-    } _parameters{};			/**< local copies of interesting parameters */
-
-    struct {
-        param_t speed_control_mode;
-        param_t throttle_idle;
-        param_t throttle_min;
-        param_t throttle_max;
-        param_t throttle_cruise;
-        param_t throttle_slew_max;
-
-    } _parameter_handles{};		/**< handles for interesting parameters */
-
-
-    /**
-     * Update our local parameter cache.
-     */
-    int		parameters_update();
-
-    void		manual_control_setpoint_poll();
-    void		control_state_poll();
-    void		position_setpoint_triplet_poll();
-    void		vehicle_control_mode_poll();
-
-    /**
-     * Publish navigation capabilities
-     */
-    void		dp_pos_ctrl_status_publish();
-
-    /**
-     * Control position.
-     */
-//TODO: change this control position function to fit my use, it should take pose, any information about speed estimation and etc.
-    bool control_position(const math::Vector<2> &global_pos, const math::Vector<3> &ground_speed,
-                             const position_setpoint_triplet_s &_pos_sp_triplet);
-    void generate_attitude_setpoint(float dt);
-
-    /**
-     * Shim for calling task_main from task_create.
-     */
-    static void	task_main_trampoline(int argc, char *argv[]);
-
-    /**
-     * Main sensor collection task.
-     */
-    void		task_main();
-
+    DEFINE_PARAMETERS(
+    (ParamFloat<px4::params::DPC_THR_CRUISE>) _thrust_cruise,
+    (ParamFloat<px4::params::DPC_THR_MAX>) _thrust_max,
+    (ParamFloat<px4::params::DPC_THR_MIN>) _thrust_min,
+    (ParamFloat<px4::params::DPC_THR_IDLE>) _thrust_idle,
+    (ParamInt<px4::params::DPC_SP_CTRL_MODE>) _speed_ctrl_mode
+    )
 };

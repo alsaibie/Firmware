@@ -36,7 +36,7 @@ px4_add_module(
 	MAIN dp_pos_control_tests
 	SRCS
 		dp_pos_control_tests.cpp
-        ../dp_pos_control.cpp
+        ../dp_pos_control_main.cpp
 	DEPENDS
 		platforms__common
 	)
