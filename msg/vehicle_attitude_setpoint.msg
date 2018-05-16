@@ -6,6 +6,7 @@ float32 pitch_body				# body angle in NED frame
 float32 yaw_body				# body angle in NED frame
 
 float32 yaw_sp_move_rate		# rad/s (commanded by user)
+float32 roll_sp_move_rate		# rad/s (commanded by user) - for use with mAUV dolphin
 
 # For quaternion-based attitude control
 float32[4] q_d					# Desired quaternion for quaternion control
