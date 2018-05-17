@@ -101,7 +101,9 @@ private:
 	/**
 	 * initialize some vectors/matrices from parameters
 	 */
+    void            parameter_subscribe_unsubscribe(bool subscribe);
 	void			parameters_updated();
+
 
 	/**
 	 * Check for parameter update and handle it.
@@ -117,6 +119,15 @@ private:
 	void		vehicle_motor_limits_poll();
 	void		vehicle_rates_setpoint_poll();
 	void		vehicle_status_poll();
+	void        sensor_gyro_poll();
+
+	/**
+	 * Publish Parameters
+	 */
+
+	void        vehicle_attitude_sp_publish();
+	void        actuator_controls_publish();
+	void        rate_ctrl_status_publish();
 
 	/**
 	 * Attitude controller.
@@ -134,6 +145,9 @@ private:
 public:
 	bool    mix_control_output(matrix::Vector3f &att_control, float thrust, matrix::Vector<float, 4> & mixed_att_control);
 private:
+	bool    actuator_dynamics_compensation(actuator_controls_s &actuator_controls, float dt);
+    void    battery_power_compensation(actuator_controls_s &actuator_controls, float dt);
+
 
 	/**
 	 * Throttle PID attenuation.
@@ -191,7 +205,7 @@ private:
 	matrix::Vector3f _rates_sp;			        /**< angular rates setpoint */
 	matrix::Vector3f _rates_int;			    /**< angular rates integral error */
 float _thrust_sp;				                /**< thrust setpoint */
-	matrix::Vector3f _mixed_att_control; 	    /**< Mixed attitude control vector */
+	matrix::Vector<float, 4> _mixed_att_control; 	    /**< Mixed attitude control vector */
 	matrix::Vector3f _att_control;			    /**< attitude control vector */
 
 	matrix::Dcmf _board_rotation;			    /**< rotation matrix for the orientation that the board is mounted */
@@ -265,6 +279,35 @@ float _thrust_sp;				                /**< thrust setpoint */
 	matrix::Vector3f _dp_rate_max;		/**< attitude rate limits in stabilized modes */
 	matrix::Vector3f _auto_rate_max;	/**< attitude rate limits in auto modes */
 	matrix::Vector3f _acro_rate_max;	/**< max attitude rates in acro mode */
+
+    /**
+* Rotor Mixing scales
+*/
+    static const int _rotor_count{4};
+    static const int _mix_length{5};
+    struct  rotors_vector{
+        float	roll_scale;	/**< scales roll for this rotor */
+        float	pitch_scale;	/**< scales pitch for this rotor */
+        float	yaw_scale;	/**< scales yaw for this rotor */
+        float thrust_scale; /**< scales Thrust for this rotor */
+        float	out_scale;	/**< scales total out for this rotor */
+    } _rotors[_rotor_count];
+
+    /** Mixing Table. Order: Rollscale, PitchScale, YawScale, ThrustScale, OutScale */
+//    static constexpr float _dolphin_x_table[_rotor_count][_mix_length] = {
+//            { -1.000000,  0.707107,  -0.707107, 1.000000, 1.000000 },
+//            { -1.000000,  -0.707107,  0.707107, 1.000000, 1.000000 },
+//            { 1.000000, 0.707107,   0.707107, 1.000000, 1.000000 },
+//            { 1.000000, -0.707107, -0.707107, 1.000000, 1.000000 },
+//    };
+    float _dolphin_x_table[_rotor_count][_mix_length] = {
+            { -1.000000,  0.5,  -0.5, 1.000000, 1.000000 },
+            { -1.000000,  -0.5,  0.5, 1.000000, 1.000000 },
+            { 1.000000, 0.5,   0.5, 1.000000, 1.000000 },
+            { 1.000000, -0.5, -0.5, 1.000000, 1.000000 },
+    };
+
+
 
 };
 

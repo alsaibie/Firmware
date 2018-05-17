@@ -80,6 +80,9 @@ void
 DolphinPositionControl::control_position_attitude(float dt)
 {
     vehicle_attitude_setpoint_poll();
+    vehicle_manual_poll();
+
+
 }
 
 /**
@@ -159,13 +162,12 @@ DolphinPositionControl::run()
         switch (_vehicle_status.nav_state){
             case vehicle_status_s::NAVIGATION_STATE_ACRO:
                 /* Do Nothing - attitude controller will handle */
-                PX4_INFO("ACRO MODE");
                 break;
             case vehicle_status_s::NAVIGATION_STATE_MANUAL:
             case vehicle_status_s::NAVIGATION_STATE_STAB:
                 /* Stabilized - Attitude Control Only */
                 control_position_attitude(dt);
-                PX4_INFO("Stabilized MODE");
+
                 break;
             case vehicle_status_s::NAVIGATION_STATE_POSCTL:
                 /* Full State Position Control*/
@@ -177,6 +179,8 @@ DolphinPositionControl::run()
                 /* Nothing */
                 break;
         }
+
+
 
         perf_end(_loop_perf);
     }
