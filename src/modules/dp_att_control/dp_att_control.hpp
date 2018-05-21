@@ -66,6 +66,7 @@
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/vehicle_status.h>
 
+#include "AttitudeController.hpp"
 /**
  * Dolphin attitude control app start / stop handling function
  */
@@ -98,56 +99,47 @@ public:
 
 private:
 
+    /**
+     * Controller
+     */
+     AttitudeController *controller;
+
+     Controller::States _states {};
+     Controller::Setpoints::Attitude _att_sp {};
+     Controller::Setpoints::Rates _rates_sp {};
+     Controller::ControlMode _control_mode {};
+
 	/**
 	 * initialize some vectors/matrices from parameters
 	 */
     void            parameter_subscribe_unsubscribe(bool subscribe);
-	void			parameters_updated();
 
 	/**
-	 * Check for parameter update and handle it.
+	 * Check for msgs updates and handle it. TODO: specify type, remove unnecessary template
 	 */
 	template <typename _msg_in_struct_T>
-    void        generic_poll(orb_id_t msg_id, int _msg_sub, _msg_in_struct_T &_msg);
-	/* Non-generic message polling */
-	void		parameter_update_poll();
-	void		vehicle_motor_limits_poll();
-	void		vehicle_status_poll();
-
-
+    bool        generic_poll(orb_id_t msg_id, int _msg_sub, _msg_in_struct_T &_msg);
 	/**
-	 * Publish Parameters
+	 * Publish msgs
 	 */
     template <typename _msg_out_struct_T>
     void        generic_publish(orb_id_t msg_id, orb_advert_t _msg_pub, _msg_out_struct_T &_msg);
-	void        vehicle_attitude_sp_publish();
-	void        actuator_controls_publish();
-	void        rate_ctrl_status_publish();
 
-	/**
-	 * Attitude controller.
-	 */
-	void		control_attitude(float dt);
+    /**
+     * Update States, setpoints and parameters
+     */
 
-	/**
-	 * Attitude rates controller.
-	 */
-	void		control_attitude_rates(float dt);
+    void        update_states();
+    void        update_attitude_setpoint();
+    void        update_rates_setpoint();
+    void        update_parameters();
 
-	/**
-	 * Mix Control Output - make public for testing purposes for now <- TOOD: Fix
-	 */
-public:
-	bool    mix_control_output(matrix::Vector3f &att_control, float thrust, matrix::Vector<float, 4> & mixed_att_control);
-private:
-	bool    actuator_dynamics_compensation(actuator_controls_s &actuator_controls, float dt);
-    void    battery_power_compensation(actuator_controls_s &actuator_controls, float dt);
+    /**
+     * Publish Control Output
+     */
+    void        publish_output();
 
 
-	/**
-	 * Throttle PID attenuation.
-	 */
-	matrix::Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
 
 	int		_v_att_sub{-1};			    /**< vehicle attitude subscription */
 	int		_v_att_sp_sub{-1};		    /**< vehicle attitude setpoint subscription */
@@ -170,9 +162,6 @@ private:
 	orb_advert_t	_actuators_0_pub{nullptr};		/**< attitude actuator controls publication */
 	orb_advert_t	_controller_status_pub{nullptr};	/**< controller status publication */
 
-	orb_id_t _rates_sp_id{nullptr};		/**< pointer to correct rates setpoint uORB metadata structure */
-	orb_id_t _actuators_id{nullptr};	/**< pointer to correct actuator controls0 uORB metadata structure */
-
 	bool		_actuators_0_circuit_breaker_enabled{false};	/**< circuit breaker to suppress output */
 
 	struct parameter_update_s           _param_update {};
@@ -194,19 +183,11 @@ private:
 
 	perf_counter_t	_loop_perf;			/**< loop performance counter */
 
-	math::LowPassFilter2p _lp_filters_d[3];                      /**< low-pass filters for D-term (roll, pitch & yaw) */
 	static constexpr const float initial_update_rate_hz = 250.f; /**< loop update rate used for initialization */
 	float _loop_update_rate_hz{initial_update_rate_hz};          /**< current rate-controller loop update rate in [Hz] */
 
-	matrix::Vector3f _rates_prev;			    /**< angular rates on previous step */
-	matrix::Vector3f _rates_prev_filtered;		/**< angular rates on previous step (low-pass filtered) */
-	matrix::Vector3f _rates_sp;			        /**< angular rates setpoint */
-	matrix::Vector3f _rates_int;			    /**< angular rates integral error */
-    float _thrust_sp;				            /**< thrust setpoint */
-	matrix::Vector<float, 4> _mixed_att_control; 	    /**< Mixed attitude control vector */
-	matrix::Vector3f _att_control;			    /**< attitude control vector */
-
 	matrix::Dcmf _board_rotation;			    /**< rotation matrix for the orientation that the board is mounted */
+
 
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::DP_ROLL_P>) _roll_p,
@@ -264,48 +245,6 @@ private:
 		(ParamFloat<px4::params::SENS_BOARD_Y_OFF>) _board_offset_y,
 		(ParamFloat<px4::params::SENS_BOARD_Z_OFF>) _board_offset_z
 
-//		(ParamFloat<px4::params::VT_WV_YAWR_SCL>) _vtol_wv_yaw_rate_scale		/**< Scale value [0, 1] for yaw rate setpoint  */
 	)
-
-	matrix::Vector3f _attitude_p;	/**< P gain for attitude control */
-	matrix::Vector3f _rate_p;		/**< P gain for angular rate error */
-	matrix::Vector3f _rate_i;		/**< I gain for angular rate error */
-	matrix::Vector3f _rate_int_lim;	/**< integrator state limit for rate loop */
-	matrix::Vector3f _rate_d;		/**< D gain for angular rate error */
-	matrix::Vector3f _rate_ff;		/**< Feedforward gain for desired rates */
-
-	matrix::Vector3f _dp_rate_max;		/**< attitude rate limits in stabilized modes */
-	matrix::Vector3f _auto_rate_max;	/**< attitude rate limits in auto modes */
-	matrix::Vector3f _acro_rate_max;	/**< max attitude rates in acro mode */
-
-    /**
-* Rotor Mixing scales
-*/
-    static const int _rotor_count{4};
-    static const int _mix_length{5};
-    struct  rotors_vector{
-        float	roll_scale;	/**< scales roll for this rotor */
-        float	pitch_scale;	/**< scales pitch for this rotor */
-        float	yaw_scale;	/**< scales yaw for this rotor */
-        float thrust_scale; /**< scales Thrust for this rotor */
-        float	out_scale;	/**< scales total out for this rotor */
-    } _rotors[_rotor_count];
-
-    /** Mixing Table. Order: Rollscale, PitchScale, YawScale, ThrustScale, OutScale */
-//    static constexpr float _dolphin_x_table[_rotor_count][_mix_length] = {
-//            { -1.000000,  0.707107,  -0.707107, 1.000000, 1.000000 },
-//            { -1.000000,  -0.707107,  0.707107, 1.000000, 1.000000 },
-//            { 1.000000, 0.707107,   0.707107, 1.000000, 1.000000 },
-//            { 1.000000, -0.707107, -0.707107, 1.000000, 1.000000 },
-//    };
-    float _dolphin_x_table[_rotor_count][_mix_length] = {
-            { -1.000000,  0.5,  -0.5, 1.000000, 1.000000 },
-            { -1.000000,  -0.5,  0.5, 1.000000, 1.000000 },
-            { 1.000000, 0.5,   0.5, 1.000000, 1.000000 },
-            { 1.000000, -0.5, -0.5, 1.000000, 1.000000 },
-    };
-
-
-
 };
 
