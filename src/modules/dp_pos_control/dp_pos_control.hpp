@@ -106,6 +106,7 @@ private:
     /**
      * initialize some vectors/matrices from parameters
      */
+    void        parameter_subscribe_unsubscribe(bool subscribe);
     void		parameters_updated();
 
     /**

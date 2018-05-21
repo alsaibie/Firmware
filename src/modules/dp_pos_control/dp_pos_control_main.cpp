@@ -64,7 +64,6 @@ DolphinPositionControl::DolphinPositionControl() :
         ModuleParams(nullptr),
         _loop_perf(perf_alloc(PC_ELAPSED, "dp_pos_control"))
 {
-
     /* Initialize variables */
     parameters_updated();
 }
@@ -72,15 +71,13 @@ DolphinPositionControl::DolphinPositionControl() :
 
 
 /**
- * Position controller  - attitude only
- * Input:
+ * Generate Attitude Setpoints - Attitude Control Only
+ * Input: _manual,
  * Output:
  */
 void
 DolphinPositionControl::control_position_attitude(float dt)
 {
-    vehicle_attitude_setpoint_poll();
-    vehicle_manual_poll();
 
 
 }
@@ -93,7 +90,7 @@ DolphinPositionControl::control_position_attitude(float dt)
 void
 DolphinPositionControl::control_position_full(float dt)
 {
-    vehicle_attitude_setpoint_poll();
+
 
 }
 
@@ -102,18 +99,7 @@ void
 DolphinPositionControl::run()
 {
 
-    /*
-     * do subscriptions
-     */
-    _params_sub = orb_subscribe(ORB_ID(parameter_update));
-    _battery_status_sub = orb_subscribe(ORB_ID(battery_status));
-    _v_att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
-    _v_att_sp_sub = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));
-    _v_control_mode_sub = orb_subscribe(ORB_ID(vehicle_control_mode));
-    _manual_control_sp_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
-    _v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
-    _vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
-    _local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
+    parameter_subscribe_unsubscribe(true);
 
     /* wakeup source */
     px4_pollfd_struct_t poll_fds = {};
@@ -166,11 +152,15 @@ DolphinPositionControl::run()
             case vehicle_status_s::NAVIGATION_STATE_MANUAL:
             case vehicle_status_s::NAVIGATION_STATE_STAB:
                 /* Stabilized - Attitude Control Only */
+                vehicle_attitude_setpoint_poll();
+                vehicle_manual_poll();
+
                 control_position_attitude(dt);
 
                 break;
             case vehicle_status_s::NAVIGATION_STATE_POSCTL:
                 /* Full State Position Control*/
+                vehicle_attitude_setpoint_poll();
                 control_position_full(dt);
                 PX4_INFO("Position MODE");
                 // TODO: Can't switch here without proper position feedback. GPS enough?
@@ -180,23 +170,40 @@ DolphinPositionControl::run()
                 break;
         }
 
-
-
         perf_end(_loop_perf);
     }
 
-    orb_unsubscribe(_params_sub);
-    orb_unsubscribe(_battery_status_sub);
-    orb_unsubscribe(_v_att_sub);
-    orb_unsubscribe(_v_att_sp_sub);
-    orb_unsubscribe(_v_control_mode_sub);
-    orb_unsubscribe(_manual_control_sp_sub);
-    orb_unsubscribe(_v_rates_sp_sub);
-    orb_unsubscribe(_vehicle_status_sub);
-    orb_unsubscribe(_local_pos_sub);
+    parameter_subscribe_unsubscribe(false);
 }
 
 /* Parameter update calls */
+
+void
+DolphinPositionControl::parameter_subscribe_unsubscribe(bool subscribe)
+{
+    if(subscribe){
+        _params_sub = orb_subscribe(ORB_ID(parameter_update));
+        _battery_status_sub = orb_subscribe(ORB_ID(battery_status));
+        _v_att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
+        _v_att_sp_sub = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));
+        _v_control_mode_sub = orb_subscribe(ORB_ID(vehicle_control_mode));
+        _manual_control_sp_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
+        _v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
+        _vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
+        _local_pos_sub = orb_subscribe(ORB_ID(vehicle_local_position));
+    }
+    else{
+        orb_unsubscribe(_params_sub);
+        orb_unsubscribe(_battery_status_sub);
+        orb_unsubscribe(_v_att_sub);
+        orb_unsubscribe(_v_att_sp_sub);
+        orb_unsubscribe(_v_control_mode_sub);
+        orb_unsubscribe(_manual_control_sp_sub);
+        orb_unsubscribe(_v_rates_sp_sub);
+        orb_unsubscribe(_vehicle_status_sub);
+        orb_unsubscribe(_local_pos_sub);
+    }
+}
 void
 DolphinPositionControl::parameters_updated()
 {
