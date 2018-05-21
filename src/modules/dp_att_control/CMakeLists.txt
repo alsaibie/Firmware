@@ -39,7 +39,9 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		dp_att_control_main.cpp
-		dp_att_control_mixer.cpp
+		dp_att_control.hpp
+		AttitudeController.cpp
+		AttitudeController.h
 	DEPENDS
 		mathlib
 	)

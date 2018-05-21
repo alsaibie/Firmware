@@ -104,27 +104,22 @@ private:
     void            parameter_subscribe_unsubscribe(bool subscribe);
 	void			parameters_updated();
 
-
 	/**
 	 * Check for parameter update and handle it.
 	 */
-	void		battery_status_poll();
+	template <typename _msg_in_struct_T>
+    void        generic_poll(orb_id_t msg_id, int _msg_sub, _msg_in_struct_T &_msg);
+	/* Non-generic message polling */
 	void		parameter_update_poll();
-	void		sensor_bias_poll();
-	void		sensor_correction_poll();
-	void		vehicle_attitude_poll();
-	void		vehicle_attitude_setpoint_poll();
-	void		vehicle_control_mode_poll();
-	void		vehicle_manual_poll();
 	void		vehicle_motor_limits_poll();
-	void		vehicle_rates_setpoint_poll();
 	void		vehicle_status_poll();
-	void        sensor_gyro_poll();
+
 
 	/**
 	 * Publish Parameters
 	 */
-
+    template <typename _msg_out_struct_T>
+    void        generic_publish(orb_id_t msg_id, orb_advert_t _msg_pub, _msg_out_struct_T &_msg);
 	void        vehicle_attitude_sp_publish();
 	void        actuator_controls_publish();
 	void        rate_ctrl_status_publish();
@@ -154,7 +149,6 @@ private:
 	 */
 	matrix::Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
 
-
 	int		_v_att_sub{-1};			    /**< vehicle attitude subscription */
 	int		_v_att_sp_sub{-1};		    /**< vehicle attitude setpoint subscription */
 	int		_v_rates_sp_sub{-1};		/**< vehicle rates setpoint subscription */
@@ -168,6 +162,7 @@ private:
 	int		_sensor_correction_sub{-1};	/**< sensor thermal correction subscription */
 	int		_sensor_bias_sub{-1};		/**< sensor in-run bias correction subscription */
 
+
 	unsigned _gyro_count{1};
 	int _selected_gyro{0};
 
@@ -180,7 +175,9 @@ private:
 
 	bool		_actuators_0_circuit_breaker_enabled{false};	/**< circuit breaker to suppress output */
 
-	struct vehicle_attitude_s		    _v_att {};		        /**< vehicle attitude */
+	struct parameter_update_s           _param_update {};
+    struct multirotor_motor_limits_s     _motor_limits = {};
+    struct vehicle_attitude_s		    _v_att {};		        /**< vehicle attitude */
 	struct vehicle_attitude_setpoint_s	_v_att_sp {};		    /**< vehicle attitude setpoint */
 	struct vehicle_rates_setpoint_s		_v_rates_sp {};		    /**< vehicle rates setpoint */
 	struct manual_control_setpoint_s	_manual_control_sp {};	/**< manual control setpoint */
@@ -191,6 +188,7 @@ private:
 	struct sensor_gyro_s			    _sensor_gyro {};	    /**< gyro data before thermal correctons and ekf bias estimates are applied */
 	struct sensor_correction_s		    _sensor_correction {};	/**< sensor thermal corrections */
 	struct sensor_bias_s			    _sensor_bias {};	    /**< sensor in-run bias corrections */
+    struct rate_ctrl_status_s           _rate_ctrl_status {};
 
 	MultirotorMixer::saturation_status _saturation_status{};
 
@@ -204,7 +202,7 @@ private:
 	matrix::Vector3f _rates_prev_filtered;		/**< angular rates on previous step (low-pass filtered) */
 	matrix::Vector3f _rates_sp;			        /**< angular rates setpoint */
 	matrix::Vector3f _rates_int;			    /**< angular rates integral error */
-float _thrust_sp;				                /**< thrust setpoint */
+    float _thrust_sp;				            /**< thrust setpoint */
 	matrix::Vector<float, 4> _mixed_att_control; 	    /**< Mixed attitude control vector */
 	matrix::Vector3f _att_control;			    /**< attitude control vector */
 
