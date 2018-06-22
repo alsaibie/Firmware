@@ -14,37 +14,52 @@ then
 	param set PE_POSNE_NOISE 0.5
 	param set PE_POSD_NOISE 1.25
 
-	param set NAV_ACC_RAD 2.0
+    param set DP_ROLL_P         0.500
+    param set DP_ROLL_FF        0.001
+    param set DP_ROLLRATE_P     0.010
+    param set DP_ROLLRATE_I     0.001
+    param set DP_ROLLRATE_D     0.001
+    param set DP_ROLLRATE_FF    0.001
+    param set DP_ROLLRATE_MAX   80.000
+    param set DP_RR_INT_LIM     0.200
 
-    param set DP_ROLL_P 8.0
-    param set DP_ROLLRATE_P 0.19
-    param set DP_ROLLRATE_I 0.1
-    param set DP_ROLLRATE_D 0.0055
-    param set DP_PITCH_P 8.0
-    param set DP_PITCHRATE_P 0.24
-    param set DP_PITCHRATE_I 0.1
-    param set DP_PITCHRATE_D 0.0065
-    param set DP_YAW_P 4.0
-    param set DP_YAWRATE_P 0.2
-    param set DP_YAWRATE_I 0.1
-    param set DP_YAWRATE_D 0.0
-    param set DP_YAW_FF 0.5
-    param set DP_ROLLRATE_MAX 720.0
-    param set DP_PITCHRATE_MAX 720.0
-    param set DP_YAWRATE_MAX 400.0
+    param set DP_PITCH_P        1.000
+    param set DP_PITCHRATE_P    0.030
+    param set DP_PITCHRATE_I    0.050
+    param set DP_PITCHRATE_D    0.0001
+    param set DP_PITCHRATE_FF   0.075
+    param set DP_PITCHRATE_MAX  100.000
+    param set DP_PR_INT_LIM     0.075
+
+    param set DP_YAW_P          0.030
+    param set DP_YAWRATE_P      0.030
+    param set DP_YAWRATE_I      0.050
+    param set DP_YAWRATE_D      0.0001
+    param set DP_YAWRATE_FF     0.075
+    param set DP_YAWRATE_MAX    120.000
+    param set DP_YAWRATE_FF     0.075
+    param set DP_YR_INT_LIM     0.750
+
     param set DP_ACRO_R_MAX 360.0
     param set DP_ACRO_P_MAX 360.0
+
+    param set DPC_MAX_ROLL      120.000
+    param set DPC_MAX_TILT      120.000
 
     param set DPC_THR_MIN 0.06
     param set DPC_MANTHR_MIN 0.06
 
-    param set ATT_BIAS_MAX 0.0
-
-    param set PWM_DISARMED 1500
+    param set DP_ROTOR_R 0.03
 
     # PWM range
+    param set PWM_DISARMED 900
     param set PWM_MIN 1100
     param set PWM_MAX 1900
+
+    param set SENS_BOARD_ROT 0
+    param set SENS_BOARD_X_OFF 0.000001
+    param set SYS_AUTOSTART 60001
+
 fi
 
 set PWM_RATE 400

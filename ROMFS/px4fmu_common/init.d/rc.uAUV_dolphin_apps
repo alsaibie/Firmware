@@ -1,32 +1,22 @@
 #!nsh
 #
 # Standard apps for uAUVs:
-# att & pos estimator, swim control
+# att & pos estimator
 #
 
-# Start Invertial Navigation Estimator
+# Start Inertial Navigation Estimator
 	attitude_estimator_q start
-
-
-# Start Position Estimator_Inav
-	position_estimator_inav start
 
 # Start Attitude Estimator 
  	dp_att_control start
- 	 	
-#
 
 # Start Position Estimator
  	dp_pos_control start
-#
 
-# Start Swim Control
 
-#
+# Start Debugger -
+# px4_dolphin_mavlink_debug
 
-# Start Debugger
-	px4_dolphin_mavlink_debug
-#
 
 # Try to force stream start of outputs
 #mavlink stream -d /dev/ttyS0 -s SERVO_OUTPUT_RAW_0 -r 20

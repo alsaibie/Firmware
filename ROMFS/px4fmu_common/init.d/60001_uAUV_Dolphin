@@ -18,10 +18,13 @@ sh /etc/init.d/rc.uAUV_dolphin_defaults
 #choose a mixer, for uAUV control we need a plain passthrough to the servos, for now
 set MIXER IO_pass
 
+# Set Mavtype as submarine
+set MAV_TYPE 12
+
 # no safety switch needed
 param set CBRK_IO_SAFETY    22027
 #don't arm nothrottle attitude channels if prearmed (This is included in circuit_breaker.h and implemented in fmu.cpp)
+param set CBRK_ON_PREARM 124578
 
-param set CBRK_DISABLE_IO_ON_PREARM 124578
 #no Airspeed Sensor Needed
-param set CBRK_AIRSPD_CHK 	162128
+param set CBRK_AIRSPD_CHK 	162128 # Required to override airspeed sensor check for arming

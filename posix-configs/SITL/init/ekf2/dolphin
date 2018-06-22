@@ -27,10 +27,6 @@ param set EKF2_GBIAS_INIT 0.01
 param set EKF2_HGT_MODE 0
 param set EKF2_MAG_TYPE 1
 param set MAV_TYPE 2
-param set DP_PITCH_P 6
-param set DP_PITCHRATE_P 0.2
-param set DP_ROLL_P 6
-param set DP_ROLLRATE_P 0.2
 param set MIS_TAKEOFF_ALT 2.5
 param set MPC_HOLD_MAX_Z 2.0
 param set MPC_Z_VEL_I 0.15
@@ -47,6 +43,15 @@ param set SYS_AUTOSTART 60001
 param set SYS_MC_EST_GROUP 2
 param set SYS_RESTART_TYPE 2
 
+param set MAV_TYPE 12
+param set CBRK_AIRSPD_CHK 	162128 # Required to override airspeed sensor check for arming
+
+param set PWM_DISARMED 900
+
+# PWM range
+param set PWM_MIN 1100
+param set PWM_MAX 1900
+
 replay tryapplyparams
 
 simulator start -s
@@ -59,11 +64,11 @@ gpssim start
 
 sensors start
 commander start
-navigator start
-ekf2 start
+#navigator start
 dp_pos_control start
 dp_att_control start
-
+ekf2 start
+#attitude_estimator_q start
 pwm_out_sim start
 mixer load /dev/pwm_output0 ROMFS/px4fmu_test/mixers/IO_pass.mix
 
@@ -76,6 +81,11 @@ mavlink stream -r 50 -s ATTITUDE -u 14556
 mavlink stream -r 50 -s ATTITUDE_QUATERNION -u 14556
 mavlink stream -r 50 -s ATTITUDE_TARGET -u 14556
 mavlink stream -r 50 -s SERVO_OUTPUT_RAW_0 -u 14556
+mavlink stream -r 50 -s ACTUATOR_CONTROL_TARGET -u 14556
+mavlink stream -r 50 -s HIL_ACTUATOR_CONTROLS -u 14556
+mavlink stream -r 50 -s HIL_RC_INPUTS_RAW -u 14556
+mavlink stream -r 50 -s HIL_SENSOR -u 14556
+
 
 
 logger start -e -t
