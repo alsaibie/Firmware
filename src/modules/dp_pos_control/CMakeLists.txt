@@ -38,6 +38,7 @@ px4_add_module(
 	STACK_MAIN 1200
 	SRCS
         dp_pos_control_main.cpp
+		PositionController.cpp
 	DEPENDS
 		platforms__common
 	)
