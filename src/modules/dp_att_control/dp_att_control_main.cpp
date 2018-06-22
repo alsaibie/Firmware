@@ -71,6 +71,7 @@
 #define AXIS_COUNT 3
 
 using namespace matrix;
+using namespace AController;
 
 
 int DolphinAttitudeControl::print_usage(const char *reason)
@@ -110,7 +111,10 @@ To reduce control latency, the module directly polls on the gyro topic published
 
 DolphinAttitudeControl::DolphinAttitudeControl() :
 	ModuleParams(nullptr),
-	_loop_perf(perf_alloc(PC_ELAPSED, "dp_att_control"))
+	_loop_perf(perf_alloc(PC_ELAPSED, "dp_att_control")),
+	_shared_lp_filters_d{{initial_update_rate_hz, 50.f},
+                       {initial_update_rate_hz, 50.f},
+                       {initial_update_rate_hz, 50.f}} // will be initialized correctly when params are loaded
 {
 	for (uint8_t i = 0; i < MAX_GYRO_COUNT; i++) {
 		_sensor_gyro_sub[i] = -1;
@@ -119,69 +123,345 @@ DolphinAttitudeControl::DolphinAttitudeControl() :
 	/* initialize thermal corrections as we might not immediately get a topic update (only non-zero values) */
 	for (unsigned i = 0; i < 3; i++) {
 		// used scale factors to unity
-		_sensor_correction.gyro_scale_0[i] = 1.0f;
-		_sensor_correction.gyro_scale_1[i] = 1.0f;
-		_sensor_correction.gyro_scale_2[i] = 1.0f;
+		_sensor_correction.msg.gyro_scale_0[i] = 1.0f;
+		_sensor_correction.msg.gyro_scale_1[i] = 1.0f;
+		_sensor_correction.msg.gyro_scale_2[i] = 1.0f;
 	}
+
+	_params.msg_id = ORB_ID(parameter_update);
+	_v_att.msg_id = ORB_ID(vehicle_attitude);
+	_v_att_sp.msg_id = ORB_ID(vehicle_attitude_setpoint);
+	_v_rates_sp.msg_id = ORB_ID(vehicle_rates_setpoint);
+	_v_control_mode.msg_id = ORB_ID(vehicle_control_mode);
+	_manual_control_sp.msg_id = ORB_ID(manual_control_setpoint);
+	_vehicle_status.msg_id = ORB_ID(vehicle_status);
+	_motor_limits.msg_id = ORB_ID(multirotor_motor_limits);
+	_battery_status.msg_id = ORB_ID(battery_status);
+	_sensor_gyro.msg_id = ORB_ID(sensor_gyro);
+	_sensor_correction.msg_id = ORB_ID(sensor_correction);
+	_sensor_bias.msg_id = ORB_ID(sensor_bias);
+	_actuators.msg_id = ORB_ID(actuator_controls_0);
+	_rate_ctrl_status.msg_id = ORB_ID(rate_ctrl_status);
+
 
 	controller = new AttitudeController();
 
-	update_parameters();
+	controller->setFilter(_shared_lp_filters_d);
+
+	update_parameters(true);
+}
+
+template <typename _struct_T>
+void
+DolphinAttitudeControl::parameter_subscribe(_struct_T &uorb_msg) {
+	uorb_msg.msg_sub = orb_subscribe(uorb_msg.msg_id);
+}
+template <typename _struct_T>
+void
+DolphinAttitudeControl::parameter_unsubscribe(_struct_T &uorb_msg) {
+	orb_unsubscribe(uorb_msg.msg_sub);
+}
+
+void
+DolphinAttitudeControl::parameter_subscribe_unsubscribe(bool subscribe){
+
+	if(subscribe){
+		parameter_subscribe(_params);
+		parameter_subscribe(_v_att);
+		parameter_subscribe(_v_att_sp);
+		parameter_subscribe(_v_rates_sp);
+		parameter_subscribe(_v_control_mode);
+		parameter_subscribe(_manual_control_sp);
+		parameter_subscribe(_vehicle_status);
+		parameter_subscribe(_motor_limits);
+		parameter_subscribe(_battery_status);
+
+		_gyro_count = math::min(orb_group_count(ORB_ID(sensor_gyro)), MAX_GYRO_COUNT);
+		if (_gyro_count == 0) {
+			_gyro_count = 1;
+		}
+		for (unsigned s = 0; s < _gyro_count; s++) {
+			_sensor_gyro_sub[s] = orb_subscribe_multi(ORB_ID(sensor_gyro), s);
+		}
+
+		parameter_subscribe(_sensor_correction);
+		parameter_subscribe(_sensor_bias);
+	}
+	else{
+		parameter_unsubscribe(_params);
+		parameter_unsubscribe(_v_att);
+		parameter_unsubscribe(_v_att_sp);
+		parameter_unsubscribe(_v_rates_sp);
+		parameter_unsubscribe(_v_control_mode);
+		parameter_unsubscribe(_manual_control_sp);
+		parameter_unsubscribe(_vehicle_status);
+		parameter_unsubscribe(_motor_limits);
+		parameter_unsubscribe(_battery_status);
+
+		for (unsigned s = 0; s < _gyro_count; s++) {
+			orb_unsubscribe(_sensor_gyro_sub[s]);
+		}
+		parameter_unsubscribe(_sensor_correction);
+		parameter_unsubscribe(_sensor_bias);
+	}
+}
+
+template <typename _struct_T>
+bool
+DolphinAttitudeControl::parameter_poll(_struct_T &uorb_msg){
+
+	bool updated = false;
+	/* In case of gyro, update to the right sub */
+	if (uorb_msg.msg_id == _sensor_gyro.msg_id){
+		uorb_msg.msg_sub = _sensor_gyro_sub[_selected_gyro];
+	}
+
+	orb_check(uorb_msg.msg_sub, &updated);
+	if (updated) {
+		orb_copy(uorb_msg.msg_id, uorb_msg.msg_sub, &uorb_msg.msg);
+		/* Handle Special Updates */
+		if (uorb_msg.msg_id == _motor_limits.msg_id){
+			_saturation_status.value = _motor_limits.msg.saturation_status;
+		}
+		else if(uorb_msg.msg_id == _sensor_correction.msg_id){
+			if (_sensor_correction.msg.selected_gyro_instance < _gyro_count) {
+				_selected_gyro = _sensor_correction.msg.selected_gyro_instance;
+			}
+		}
+        else if(uorb_msg.msg_id == _params.msg_id){
+            updateParams();
+        }
+	}
+	return updated;
+}
+template <typename _struct_T>
+void DolphinAttitudeControl::parameter_publish(_struct_T &urob_msg){
+
+	/* Handle Special Updates */
+	if (urob_msg.msg_id == _v_rates_sp.msg_id){
+		/* publish attitude rates setpoint */
+        AController::Setpoints::Rates controller_rates_sp = controller->getRateSetpoint();
+		_v_rates_sp.msg.roll = controller_rates_sp.rpy(0);
+		_v_rates_sp.msg.pitch = controller_rates_sp.rpy(1);
+		_v_rates_sp.msg.yaw = controller_rates_sp.rpy(2);
+		_v_rates_sp.msg.thrust = controller_rates_sp.thrust;
+		_v_rates_sp.msg.timestamp = hrt_absolute_time();
+//        PX4_INFO("Rates SP %f, %f, %f, %f", (double)_v_rates_sp.msg.roll, (double)_v_rates_sp.msg.pitch,
+//                 (double)_v_rates_sp.msg.yaw, (double)_v_rates_sp.msg.thrust);
+		if (_v_rates_sp.msg_pub != nullptr) {
+			orb_publish(_v_rates_sp.msg_id, _v_rates_sp.msg_pub, &_v_rates_sp.msg);
+		} else {
+			_v_rates_sp.msg_pub = orb_advertise(_v_rates_sp.msg_id, &_v_rates_sp.msg);
+		}
+	}
+
+	else if(urob_msg.msg_id == _actuators.msg_id && !_actuators_0_circuit_breaker_enabled){
+
+		/* publish actuator controls */
+
+        AController::Outputs mixed_u = controller->getMixedControlOutput();
+		_actuators.msg.control[0] = (PX4_ISFINITE(mixed_u.actuator(0))) ? mixed_u.actuator(0) : 0.0f;
+		_actuators.msg.control[1] = (PX4_ISFINITE(mixed_u.actuator(1))) ? mixed_u.actuator(1) : 0.0f;
+		_actuators.msg.control[2] = (PX4_ISFINITE(mixed_u.actuator(2))) ? mixed_u.actuator(2) : 0.0f;
+		_actuators.msg.control[3] = (PX4_ISFINITE(mixed_u.actuator(3))) ? mixed_u.actuator(3) : 0.0f;
+		_actuators.msg.timestamp = hrt_absolute_time();
+		_actuators.msg.timestamp_sample = _sensor_gyro.msg.timestamp;
+//		PX4_INFO("Actuator Values %f, %f, %f, %f", (double)_actuators.msg.control[0], (double)_actuators.msg.control[1],
+//				 (double)_actuators.msg.control[2], (double)_actuators.msg.control[3]);
+		if (_actuators.msg_pub != nullptr) {
+			orb_publish(_actuators.msg_id, _actuators.msg_pub, &_actuators.msg);
+		} else {
+			_actuators.msg_pub = orb_advertise(_actuators.msg_id, &_actuators.msg);
+		}
+	}
+
+	else if(urob_msg.msg_id == _rate_ctrl_status.msg_id){
+        AController::ControllerStatus _ctrl_status = controller->getControllerStatus();
+		_rate_ctrl_status.msg.timestamp = hrt_absolute_time();
+		_rate_ctrl_status.msg.rollspeed = _ctrl_status.rates_prev(0);
+		_rate_ctrl_status.msg.pitchspeed = _ctrl_status.rates_prev(1);
+		_rate_ctrl_status.msg.yawspeed = _ctrl_status.rates_prev(2);
+		_rate_ctrl_status.msg.rollspeed_integ = _ctrl_status.rates_int(0);
+		_rate_ctrl_status.msg.pitchspeed_integ = _ctrl_status.rates_int(1);
+		_rate_ctrl_status.msg.yawspeed_integ = _ctrl_status.rates_int(2);
+
+		if (_rate_ctrl_status.msg_pub != nullptr) {
+			orb_publish(_rate_ctrl_status.msg_id, _rate_ctrl_status.msg_pub, &_rate_ctrl_status.msg);
+		} else {
+            _rate_ctrl_status.msg_pub = orb_advertise(_rate_ctrl_status.msg_id, &_rate_ctrl_status.msg);
+		}
+	}
+
+	/* Generic Publishes */
+	else{
+		if (urob_msg.msg_pub != nullptr) {
+			orb_publish(urob_msg.msg_id, urob_msg.msg_pub, &urob_msg.msg);
+		} else if (urob_msg.msg_id) {
+			urob_msg.msg_pub = orb_advertise(urob_msg.msg_id, &urob_msg.msg);
+		}
+	}
 }
 
 void
 DolphinAttitudeControl::update_states() {
 
 	/* Attitude */
-	Controller::States states;
-	generic_poll(ORB_ID(vehicle_attitude), _v_att_sub, _v_att);
-	states.att.q = Quatf(_v_att.q);
+	AController::States controller_states;
+	parameter_poll(_v_att);
+	controller_states.att.q = Quatf(_v_att.msg.q);
+
+//    PX4_INFO("att q %f, %f, %f, %f", (double)_v_att.msg.q[0], (double)_v_att.msg.q[1], (double)_v_att.msg.q[2],
+//             (double)_v_att.msg.q[3]);
 
 	/* Rates */
-	generic_poll(ORB_ID(sensor_gyro), _sensor_gyro_sub[_selected_gyro], _sensor_gyro);
-	generic_poll(ORB_ID(sensor_bias), _sensor_bias_sub, _sensor_bias);
-	generic_poll(ORB_ID(sensor_correction),_sensor_correction_sub, _sensor_correction);
-	generic_poll(ORB_ID(multirotor_motor_limits), _motor_limits_sub, _motor_limits);
+	parameter_poll(_sensor_gyro);
+	parameter_poll(_sensor_bias);
+	parameter_poll(_sensor_correction);
+	parameter_poll(_motor_limits);
 
 	// get the raw gyro data and correct for thermal errors
 	if (_selected_gyro == 0) {
-		states.rates.rpy(0) = (_sensor_gyro.x - _sensor_correction.gyro_offset_0[0]) * _sensor_correction.gyro_scale_0[0];
-		states.rates.rpy(1) = (_sensor_gyro.y - _sensor_correction.gyro_offset_0[1]) * _sensor_correction.gyro_scale_0[1];
-		states.rates.rpy(2) = (_sensor_gyro.z - _sensor_correction.gyro_offset_0[2]) * _sensor_correction.gyro_scale_0[2];
+		controller_states.rates.rpy(0) = (_sensor_gyro.msg.x - _sensor_correction.msg.gyro_offset_0[0]) * _sensor_correction.msg.gyro_scale_0[0];
+		controller_states.rates.rpy(1) = (_sensor_gyro.msg.y - _sensor_correction.msg.gyro_offset_0[1]) * _sensor_correction.msg.gyro_scale_0[1];
+		controller_states.rates.rpy(2) = (_sensor_gyro.msg.z - _sensor_correction.msg.gyro_offset_0[2]) * _sensor_correction.msg.gyro_scale_0[2];
 
 	} else if (_selected_gyro == 1) {
-		states.rates.rpy(0) = (_sensor_gyro.x - _sensor_correction.gyro_offset_1[0]) * _sensor_correction.gyro_scale_1[0];
-		states.rates.rpy(1) = (_sensor_gyro.y - _sensor_correction.gyro_offset_1[1]) * _sensor_correction.gyro_scale_1[1];
-		states.rates.rpy(2) = (_sensor_gyro.z - _sensor_correction.gyro_offset_1[2]) * _sensor_correction.gyro_scale_1[2];
+		controller_states.rates.rpy(0) = (_sensor_gyro.msg.x - _sensor_correction.msg.gyro_offset_1[0]) * _sensor_correction.msg.gyro_scale_1[0];
+		controller_states.rates.rpy(1) = (_sensor_gyro.msg.y - _sensor_correction.msg.gyro_offset_1[1]) * _sensor_correction.msg.gyro_scale_1[1];
+		controller_states.rates.rpy(2) = (_sensor_gyro.msg.z - _sensor_correction.msg.gyro_offset_1[2]) * _sensor_correction.msg.gyro_scale_1[2];
 
 	} else if (_selected_gyro == 2) {
-		states.rates.rpy(0) = (_sensor_gyro.x - _sensor_correction.gyro_offset_2[0]) * _sensor_correction.gyro_scale_2[0];
-		states.rates.rpy(1) = (_sensor_gyro.y - _sensor_correction.gyro_offset_2[1]) * _sensor_correction.gyro_scale_2[1];
-		states.rates.rpy(2) = (_sensor_gyro.z - _sensor_correction.gyro_offset_2[2]) * _sensor_correction.gyro_scale_2[2];
+		controller_states.rates.rpy(0) = (_sensor_gyro.msg.x - _sensor_correction.msg.gyro_offset_2[0]) * _sensor_correction.msg.gyro_scale_2[0];
+		controller_states.rates.rpy(1) = (_sensor_gyro.msg.y - _sensor_correction.msg.gyro_offset_2[1]) * _sensor_correction.msg.gyro_scale_2[1];
+		controller_states.rates.rpy(2) = (_sensor_gyro.msg.z - _sensor_correction.msg.gyro_offset_2[2]) * _sensor_correction.msg.gyro_scale_2[2];
 
 	} else {
-		states.rates.rpy(0) = _sensor_gyro.x;
-		states.rates.rpy(1) = _sensor_gyro.y;
-		states.rates.rpy(2) = _sensor_gyro.z;
+		controller_states.rates.rpy(0) = _sensor_gyro.msg.x;
+		controller_states.rates.rpy(1) = _sensor_gyro.msg.y;
+		controller_states.rates.rpy(2) = _sensor_gyro.msg.z;
 	}
 
 	// rotate corrected measurements from sensor to body frame
-	states.rates.rpy = _board_rotation * states.rates.rpy;
+	controller_states.rates.rpy = _board_rotation * controller_states.rates.rpy;
 
 	// correct for in-run bias errors
-	states.rates.rpy(0) -= _sensor_bias.gyro_x_bias;
-	states.rates.rpy(1) -= _sensor_bias.gyro_y_bias;
-	states.rates.rpy(2) -= _sensor_bias.gyro_z_bias;
+	controller_states.rates.rpy(0) -= _sensor_bias.msg.gyro_x_bias;
+	controller_states.rates.rpy(1) -= _sensor_bias.msg.gyro_y_bias;
+	controller_states.rates.rpy(2) -= _sensor_bias.msg.gyro_z_bias;
 
 	/* Power */
-	generic_poll(ORB_ID(battery_status), _battery_status_sub, _battery_status);
-	//TODO: pass correct power parameter to controller
+	parameter_poll(_battery_status);
+	//TODO: Add more battery parameters, like nominal voltage and such. Also add it in uwsim_sensor
+	controller_states.power.bat_scale_en = _bat_scale_en.get();
+	controller_states.power.bat_scale_mA = _battery_status.msg.remaining;
 
-	/* Control Mode */
-	generic_poll(ORB_ID(vehicle_control_mode), _v_control_mode_sub, _v_control_mode);
-	//TODO: pass correct control mode to controller
-	controller->updateStates(states);
+	/* And update to controller */
+	controller->updateStates(controller_states);
 }
+
+void
+DolphinAttitudeControl::update_parameters(bool force)
+{
+	/* Store some of the parameters in a more convenient way & precompute often-used values */
+    const float rate_gain_scale_ = .01f; //TODO: move as param?
+
+    if(parameter_poll(_params) || force) {
+	    PX4_INFO("Hello");
+		AController::Limits limits = controller->getLimits();
+		AController::Gains gains  = controller->getGains();
+        AController::Constants constants;
+
+		/* roll gains */
+		gains.att_p(0) = _roll_p.get();
+		gains.rate_p(0) = _roll_rate_p.get() * rate_gain_scale_;
+		gains.rate_i(0) = _roll_rate_i.get() * rate_gain_scale_;
+		limits.rate_int_lim(0) = _roll_rate_integ_lim.get() * rate_gain_scale_;
+		gains.rate_d(0) = _roll_rate_d.get() * rate_gain_scale_;
+		gains.rate_ff(0) = _roll_rate_ff.get() * rate_gain_scale_;
+        gains.att_ff(0) = _roll_ff.get();
+
+		/* pitch gains */
+		gains.att_p(1) = _pitch_p.get();
+		gains.rate_p(1) = _pitch_rate_p.get() * rate_gain_scale_;
+		gains.rate_i(1) = _pitch_rate_i.get() * rate_gain_scale_;
+		limits.rate_int_lim(1) = _pitch_rate_integ_lim.get() * rate_gain_scale_;
+		gains.rate_d(1) = _pitch_rate_d.get() * rate_gain_scale_;
+		gains.rate_ff(1) = _pitch_rate_ff.get() * rate_gain_scale_;
+
+		/* yaw gains */
+		gains.att_p(2) = _yaw_p.get();
+		gains.rate_p(2) = _yaw_rate_p.get() * rate_gain_scale_;
+		gains.rate_i(2) = limits.rate_int_lim(2) = _yaw_rate_integ_lim.get() * rate_gain_scale_;
+		gains.rate_d(2) = _yaw_rate_d.get() * rate_gain_scale_;
+		gains.rate_ff(2) = _yaw_rate_ff.get() * rate_gain_scale_;
+
+		/* low pass filter*/
+		if (fabsf(_shared_lp_filters_d[0].get_cutoff_freq() - _d_term_cutoff_freq.get()) > 0.01f) {
+			_shared_lp_filters_d[0].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
+			_shared_lp_filters_d[1].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
+			_shared_lp_filters_d[2].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
+		}
+
+		/* angular rate limits */
+
+		limits.manual_rate_max(0) = math::radians(_roll_rate_max.get());
+		limits.manual_rate_max(1) = math::radians(_pitch_rate_max.get());
+		limits.manual_rate_max(2) = math::radians(_yaw_rate_max.get());
+
+		/* auto angular rate limits */
+		limits.auto_rate_max(0) = math::radians(_roll_auto_max.get());
+		limits.auto_rate_max(1) = math::radians(_pitch_rate_max.get());
+		limits.auto_rate_max(2) = math::radians(_yaw_rate_max.get());
+
+		/* manual rate control acro mode rate limits and expo */
+		limits.acro_rate_max(0) = math::radians(_acro_roll_max.get());
+		limits.acro_rate_max(1) = math::radians(_acro_pitch_max.get());
+		limits.acro_rate_max(2) = math::radians(_acro_yaw_max.get());
+
+		/* Expo Rates */
+		limits.acro_expo_py = math::radians(_acro_expo_py.get());
+		limits.acro_expo_r = math::radians(_acro_expo_r.get());
+		limits.acro_superexpo_py = math::radians(_acro_superexpo_py.get());
+		limits.acro_superexpo_r = math::radians(_acro_superexpo_r.get());
+
+        constants.Vn_norm_coefficients(0) = _c0_Vn_norm.get();
+        constants.Vn_norm_coefficients(1) = _c1_Vn_norm.get();
+        constants.Vn_norm_coefficients(2) = _c2_Vn_norm.get();
+        PX4_INFO("Vn norm Coefficients: %f, %f, %f", (double)constants.Vn_norm_coefficients(0), (double)constants.Vn_norm_coefficients(1),
+                 (double)constants.Vn_norm_coefficients(2));
+
+        constants.VT_coefficients(0) = _c0_VT.get();
+        constants.VT_coefficients(1) = _c1_VT.get();
+        constants.VT_coefficients(2) = _c2_VT.get();
+        PX4_INFO("VT Coefficients: %f, %f, %f", (double)constants.VT_coefficients(0), (double)constants.VT_coefficients(1),
+                 (double)constants.VT_coefficients(2));
+
+        constants.VTorq_coefficients(0) = 0.0f;
+        constants.VTorq_coefficients(1) = 0.0f;
+        constants.VTorq_coefficients(2) = _c2_VTORQ.get();
+        PX4_INFO("VT Coefficients: %f, %f, %f", (double)constants.VTorq_coefficients(0), (double)constants.VTorq_coefficients(1),
+                 (double)constants.VTorq_coefficients(2));
+
+    	constants.rotor_radius = _rotor_radius.get();
+
+		controller->updateGains(gains);
+		controller->updateLimits(limits);
+		controller->updateConstants(constants);
+
+		_actuators_0_circuit_breaker_enabled = circuit_breaker_enabled("CBRK_RATE_CTRL", CBRK_RATE_CTRL_KEY);
+
+		/* get transformation matrix from sensor/board to body frame */
+		_board_rotation = get_rot_matrix((enum Rotation) _board_rotation_param.get());
+
+		/* fine tune the rotation */
+		Dcmf board_rotation_offset(Eulerf(
+				M_DEG_TO_RAD_F * _board_offset_x.get(),
+				M_DEG_TO_RAD_F * _board_offset_y.get(),
+				M_DEG_TO_RAD_F * _board_offset_z.get()));
+		_board_rotation = board_rotation_offset * _board_rotation;
+	}
+}
+
 
 void
 DolphinAttitudeControl::run()
@@ -233,8 +513,13 @@ DolphinAttitudeControl::run()
 				dt = 0.02f; }
 
 			/* check for updates in other topics */
-			generic_poll(ORB_ID(vehicle_status), _vehicle_status_sub, _vehicle_status);
+			parameter_poll(_vehicle_status);
 			update_parameters();
+
+			/*
+			 * Update States
+			 * */
+            update_states();
 
             /*
              * Control Step 1: Compute Attitude Rates - Using switch on nav states rather than control modes for explicitness
@@ -244,22 +529,23 @@ DolphinAttitudeControl::run()
              */
 			bool publish_rate_sp = false;
 
-			if(_vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED) {_control_mode.is_armed = true;}
-			else {_control_mode.is_armed = false;}
+			AController::ControlMode _controller_mode;
 
-            switch (_vehicle_status.nav_state){
+			if(_vehicle_status.msg.arming_state == vehicle_status_s::ARMING_STATE_ARMED) {_controller_mode.is_armed = true;}
+			else {_controller_mode.is_armed = false;}
+
+            switch (_vehicle_status.msg.nav_state){
                 case vehicle_status_s::NAVIGATION_STATE_ACRO: {
 					/* ACRO mode - Rate Setpoint from Manual Input */
-					generic_poll(ORB_ID(manual_control_setpoint), _manual_control_sp_sub, _manual_control_sp);
+					parameter_poll(_manual_control_sp);
 
-					/* Update Control Mode */
-					_control_mode.mode = Controller::CONTROL_MODE::Acro;
-					controller->updateControlMode(_control_mode);
+					_controller_mode.mode = AController::CONTROL_MODE::Acro;
+					controller->updateControlMode(_controller_mode);
 
-					/* Control Rates */
-					_rates_sp.rpy = Vector3f(_manual_control_sp.y, _manual_control_sp.x, _manual_control_sp.r);
-					_rates_sp.thrust = _manual_control_sp.z;
-					controller->updateRateSetpoint(_rates_sp);
+					AController::Setpoints::Rates controller_rates_sp;
+					controller_rates_sp.rpy = Vector3f(_manual_control_sp.msg.y, _manual_control_sp.msg.x, _manual_control_sp.msg.r);
+					controller_rates_sp.thrust = 2.0f * _manual_control_sp.msg.z - 1.0f;
+					controller->updateRateSetpoint(controller_rates_sp);
 					controller->controlRates(dt);
 
 					publish_rate_sp = true;
@@ -272,22 +558,24 @@ DolphinAttitudeControl::run()
                 case vehicle_status_s::NAVIGATION_STATE_RATTITUDE:
                 case vehicle_status_s::NAVIGATION_STATE_POSCTL:
                 case vehicle_status_s::NAVIGATION_STATE_ALTCTL: {
-					/* Grab Attitude Setpoint */
-					generic_poll(ORB_ID(vehicle_attitude_setpoint), _v_att_sp_sub, _v_att_sp);
+					parameter_poll(_v_att_sp);
 
-					/* Update Control Mode */
-					_control_mode.mode = Controller::CONTROL_MODE::Manual;
-					controller->updateControlMode(_control_mode);
+					_controller_mode.mode = AController::CONTROL_MODE::Manual;
+					controller->updateControlMode(_controller_mode);
 
-					/* Control Attitude */
-					_att_sp.q = _v_att_sp.q_d;
-					controller->updateAttitudeSetpoint(_att_sp);
-					controller->controlAttitude(dt)
+					AController::Setpoints::Attitude controller_att_sp;
+					controller_att_sp.q = _v_att_sp.msg.q_d;
 
-					/* Control Rates */
-					_rates_sp = controller->getRateSetpoint();
-					controller->updateRateSetpoint(_rates_sp);
-					controller->controlRates(dt); //TODO: pass armed bool flag
+					controller->updateAttitudeSetpoint(controller_att_sp);
+					controller->controlAttitude(dt);
+
+
+                    AController::Setpoints::Rates controller_rates_sp;
+					controller_rates_sp = controller->getRateSetpoint();
+					controller_rates_sp.thrust = _v_att_sp.msg.thrust;
+
+					controller->updateRateSetpoint(controller_rates_sp);
+					controller->controlRates(dt);
 
 					publish_rate_sp = true;
 					break;
@@ -295,20 +583,18 @@ DolphinAttitudeControl::run()
 
                 case vehicle_status_s::NAVIGATION_STATE_OFFBOARD: {
                 	/* Add any independent attitude controller nav state here */
-					/* Poll rates setpoint topic */
-					generic_poll(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_sub, _v_rates_sp);
+					parameter_poll(_v_rates_sp);
 
-					/* Update Control Mode */
-					_control_mode.mode = Controller::CONTROL_MODE::Auto;
-					controller->updateControlMode(_control_mode);
+					_controller_mode.mode = AController::CONTROL_MODE::Auto;
+					controller->updateControlMode(_controller_mode);
 
-					/* Control Rates */
-					_rates_sp.rpy(0) = _v_rates_sp.roll;
-					_rates_sp.rpy(1) = _v_rates_sp.pitch;
-					_rates_sp.rpy(2) = _v_rates_sp.yaw;
-					_rates_sp.thrust = _v_rates_sp.thrust;
+                    AController::Setpoints::Rates controller_rates_sp;
+					controller_rates_sp.rpy(0) = _v_rates_sp.msg.roll;
+					controller_rates_sp.rpy(1) = _v_rates_sp.msg.pitch;
+					controller_rates_sp.rpy(2) = _v_rates_sp.msg.yaw;
+					controller_rates_sp.thrust = _v_rates_sp.msg.thrust;
 
-					controller->updateRateSetpoint(_rates_sp);
+					controller->updateRateSetpoint(controller_rates_sp);
 					controller->controlRates(dt);
 
 					break;
@@ -325,18 +611,16 @@ DolphinAttitudeControl::run()
                     break;
             }
 
-            if(publish_rate_sp){
-				generic_publish(ORB_ID(vehicle_rates_setpoint), _v_rates_sp_pub, _v_rates_sp);
-            }
+            if(publish_rate_sp){ parameter_publish(_v_rates_sp); }
 
 			/* Publish Actuator Controls */
-            publish_output();
+			parameter_publish(_actuators);
 
             /* publish controller status */
-            generic_publish(ORB_ID(rate_ctrl_status), _controller_status_pub, _rate_ctrl_status);
+            parameter_publish(_rate_ctrl_status);
 
             /* calculate loop update rate while disarmed or at least a few times (updating the filter is expensive) */
-            if ( _vehicle_status.nav_state != vehicle_status_s::ARMING_STATE_ARMED || (now - task_start) < 3300000) {
+            if ( _vehicle_status.msg.nav_state != vehicle_status_s::ARMING_STATE_ARMED || (now - task_start) < 3300000) {
                 dt_accumulator += dt;
                 ++loop_counter;
 
@@ -346,9 +630,9 @@ DolphinAttitudeControl::run()
                     dt_accumulator = 0;
                     loop_counter = 0;
                     //TODO: move to controller
-                    _lp_filters_d[0].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
-                    _lp_filters_d[1].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
-                    _lp_filters_d[2].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
+					_shared_lp_filters_d[0].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
+					_shared_lp_filters_d[1].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
+					_shared_lp_filters_d[2].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
                 }
             }
 		}
@@ -359,198 +643,7 @@ DolphinAttitudeControl::run()
 	parameter_subscribe_unsubscribe(false);
 }
 
-/* Parameter update calls */
 
-void
-DolphinAttitudeControl::parameter_subscribe_unsubscribe(bool subscribe){
-
-	if(subscribe){
-		_v_att_sub = orb_subscribe(ORB_ID(vehicle_attitude));
-		_v_att_sp_sub = orb_subscribe(ORB_ID(vehicle_attitude_setpoint));
-		_v_rates_sp_sub = orb_subscribe(ORB_ID(vehicle_rates_setpoint));
-		_v_control_mode_sub = orb_subscribe(ORB_ID(vehicle_control_mode));
-		_params_sub = orb_subscribe(ORB_ID(parameter_update));
-		_manual_control_sp_sub = orb_subscribe(ORB_ID(manual_control_setpoint));
-		_vehicle_status_sub = orb_subscribe(ORB_ID(vehicle_status));
-		_motor_limits_sub = orb_subscribe(ORB_ID(multirotor_motor_limits));
-		_battery_status_sub = orb_subscribe(ORB_ID(battery_status));
-
-		_gyro_count = math::min(orb_group_count(ORB_ID(sensor_gyro)), MAX_GYRO_COUNT);
-		if (_gyro_count == 0) {
-			_gyro_count = 1;
-		}
-		for (unsigned s = 0; s < _gyro_count; s++) {
-			_sensor_gyro_sub[s] = orb_subscribe_multi(ORB_ID(sensor_gyro), s);
-		}
-		_sensor_correction_sub = orb_subscribe(ORB_ID(sensor_correction));
-		_sensor_bias_sub = orb_subscribe(ORB_ID(sensor_bias));
-	}
-	else{
-		orb_unsubscribe(_v_att_sub);
-		orb_unsubscribe(_v_att_sp_sub);
-		orb_unsubscribe(_v_rates_sp_sub);
-		orb_unsubscribe(_v_control_mode_sub);
-		orb_unsubscribe(_params_sub);
-		orb_unsubscribe(_manual_control_sp_sub);
-		orb_unsubscribe(_vehicle_status_sub);
-		orb_unsubscribe(_motor_limits_sub);
-		orb_unsubscribe(_battery_status_sub);
-		for (unsigned s = 0; s < _gyro_count; s++) {
-			orb_unsubscribe(_sensor_gyro_sub[s]);
-		}
-		orb_unsubscribe(_sensor_correction_sub);
-		orb_unsubscribe(_sensor_bias_sub);
-	}
-}
-
-template <typename _msg_in_struct_T>
-bool DolphinAttitudeControl::generic_poll(orb_id_t msg_id, int _msg_sub, _msg_in_struct_T &_msg){
-
-	bool updated = false;
-	orb_check(_msg_sub, &updated);
-	if (updated) {
-		orb_copy(msg_id, _msg_sub, &_msg);
-
-		/* Handle Special Updates */
-		if (msg_id == ORB_ID(multirotor_motor_limits)){
-			_saturation_status.value = _motor_limits.saturation_status;
-		}
-		if(msg_id == ORB_ID(parameter_update)){
-			updateParams();
-		}
-		if(msg_id == ORB_ID(sensor_correction)){
-			if (_sensor_correction.selected_gyro_instance < _gyro_count) {
-				_selected_gyro = _sensor_correction.selected_gyro_instance;
-			}
-		}
-	}
-
-	return updated;
-}
-
-template <typename _msg_out_struct_T>
-void DolphinAttitudeControl::generic_publish(orb_id_t msg_id, orb_advert_t _msg_pub, _msg_out_struct_T &_msg){
-
-	/* Handle Special Updates */
-	bool do_publish = true;
-	if (msg_id == ORB_ID(vehicle_rates_setpoint)){
-		/* publish attitude rates setpoint */
-		_v_rates_sp.roll = _rates_sp.rpy(0);
-		_v_rates_sp.pitch = _rates_sp.rpy(1);
-		_v_rates_sp.yaw = _rates_sp.rpy(2);
-		_v_rates_sp.thrust = _rates_sp.thrust;
-		_v_rates_sp.timestamp = hrt_absolute_time();
-	}
-	if(msg_id == ORB_ID(actuator_controls_0)){
-		if (_actuators_0_circuit_breaker_enabled) {do_publish = false;}
-	}
-	if(msg_id == ORB_ID(rate_ctrl_status)){
-		Controller::ControllerStatus _ctrl_status = controller->getControllerStatus();
-		_rate_ctrl_status.timestamp = hrt_absolute_time();
-		_rate_ctrl_status.rollspeed = _ctrl_status.rates_prev(0);
-		_rate_ctrl_status.pitchspeed = _ctrl_status.rates_prev(1);
-		_rate_ctrl_status.yawspeed = _ctrl_status.rates_prev(2);
-		_rate_ctrl_status.rollspeed_integ = _ctrl_status.rates_int(0);
-		_rate_ctrl_status.pitchspeed_integ = _ctrl_status.rates_int(1);
-		_rate_ctrl_status.yawspeed_integ = _ctrl_status.rates_int(2);
-	}
-
-	if(do_publish) {
-		if (_msg_pub != nullptr) {
-			orb_publish(msg_id, _msg_pub, &_msg);
-		} else if (msg_id) {
-			_msg_pub = orb_advertise(msg_id, &_msg);
-		}
-	}
-}
-
-void DolphinAttitudeControl::publish_output(){
-
-	/* publish actuator controls */
-	Controller::Outputs compensated_u = controller->getCompensatedControlOutput();
-
-	_actuators.control[0] = (PX4_ISFINITE(compensated_u.actuator(0))) ? compensated_u.actuator(0) : 0.0f;
-	_actuators.control[1] = (PX4_ISFINITE(compensated_u.actuator(1))) ? compensated_u.actuator(1) : 0.0f;
-	_actuators.control[2] = (PX4_ISFINITE(compensated_u.actuator(2))) ? compensated_u.actuator(2) : 0.0f;
-	_actuators.control[3] = (PX4_ISFINITE(compensated_u.actuator(3))) ? compensated_u.actuator(3) : 0.0f;
-	_actuators.timestamp = hrt_absolute_time();
-	_actuators.timestamp_sample = _sensor_gyro.timestamp;
-
-	/* Publish Actuator Controls */
-	generic_publish(ORB_ID(actuator_controls_0), _actuators_0_pub, _actuators);
-}
-
-void
-DolphinAttitudeControl::update_parameters()
-{
-	/* Store some of the parameters in a more convenient way & precompute often-used values */
-
-	if(generic_poll(ORB_ID(parameter_update), _params_sub, _param_update)) {
-		Controller::Limits limits;
-		Controller::Gains gains;
-		/* roll gains */
-		limits.rate_int_lim
-		gains.att_p(0) = _roll_p.get();
-		gains.rate_p(0) = _roll_rate_p.get();
-		gains.rate_i(0) = _roll_rate_i.get();
-		limits.rate_int_lim(0) = _roll_rate_integ_lim.get();
-		gains.rate_d(0) = _roll_rate_d.get();
-		gains.rate_ff(0) = _roll_rate_ff.get();
-
-		/* pitch gains */
-		gains.att_p(1) = _pitch_p.get();
-		gains.rate_p(1) = _pitch_rate_p.get();
-		gains.rate_i(1) = _pitch_rate_i.get();
-		limits.rate_int_lim(1) = _pitch_rate_integ_lim.get();
-		gains.rate_d(1) = _pitch_rate_d.get();
-		gains.rate_ff(1) = _pitch_rate_ff.get();
-
-		/* yaw gains */
-		gains.att_p(2) = _yaw_p.get();
-		gains.rate_p(2) = _yaw_rate_p.get();
-		gains.rate_i(2) = limits.rate_int_lim(2) = _yaw_rate_integ_lim.get();
-		gains.rate_d(2) = _yaw_rate_d.get();
-		gains.rate_ff(2) = _yaw_rate_ff.get();
-
-		if (fabsf(gains.lp_filters_d[0].get_cutoff_freq() - _d_term_cutoff_freq.get()) > 0.01f) {
-			gains.lp_filters_d[0].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
-			gains.lp_filters_d[1].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
-			gains.lp_filters_d[2].set_cutoff_frequency(_loop_update_rate_hz, _d_term_cutoff_freq.get());
-		}
-
-		/* angular rate limits */
-
-		limits.manual_rate_max(0) = math::radians(_roll_rate_max.get());
-		limits.manual_rate_max(1) = math::radians(_pitch_rate_max.get());
-		limits.manual_rate_max(2) = math::radians(_yaw_rate_max.get());
-
-		/* auto angular rate limits */
-		limits.auto_rate_max(0) = math::radians(_roll_rate_max.get());
-		limits.auto_rate_max(1) = math::radians(_pitch_rate_max.get());
-		limits.auto_rate_max(2) = math::radians(_yaw_auto_max.get());
-
-		/* manual rate control acro mode rate limits and expo */
-		limits.acro_rate_max(0) = math::radians(_acro_roll_max.get());
-		limits.acro_rate_max(1) = math::radians(_acro_pitch_max.get());
-		limits.acro_rate_max(2) = math::radians(_acro_yaw_max.get());
-
-		controller->updateGains(gains);
-		controller->updateLimits(limits);
-
-
-		_actuators_0_circuit_breaker_enabled = circuit_breaker_enabled("CBRK_RATE_CTRL", CBRK_RATE_CTRL_KEY);
-
-		/* get transformation matrix from sensor/board to body frame */
-		_board_rotation = get_rot_matrix((enum Rotation) _board_rotation_param.get());
-
-		/* fine tune the rotation */
-		Dcmf board_rotation_offset(Eulerf(
-				M_DEG_TO_RAD_F * _board_offset_x.get(),
-				M_DEG_TO_RAD_F * _board_offset_y.get(),
-				M_DEG_TO_RAD_F * _board_offset_z.get()));
-		_board_rotation = board_rotation_offset * _board_rotation;
-	}
-}
 
 /* App Initializations */
 

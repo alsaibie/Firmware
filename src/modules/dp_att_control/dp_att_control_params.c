@@ -41,241 +41,253 @@
  */
 
 /**
- * Roll P gain
+ * Roll P gain x 100
  *
  * Roll proportional gain, i.e. desired angular speed in rad/s for error 1 rad.
  *
  * @unit 1/s
  * @min 0.0
- * @max 8
+ * @max 30
  * @decimal 2
- * @increment 0.1
+ * @increment 0.05
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_ROLL_P, 6.5f);
+PARAM_DEFINE_FLOAT(DP_ROLL_P, 15.0f);
 
 /**
- * Roll rate P gain
+ * Roll feed forward x100
+ *
+ * Feed forward weight for manual roll control. 0 will give slow responce and no overshot, 1 - fast responce and big overshot.
+ *
+ * @min 0.0
+ * @max 5.0
+ * @decimal 2
+ * @increment 0.01
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_ROLL_FF, 1.0f);
+
+/**
+ * Roll rate P gain x100
  *
  * Roll rate proportional gain, i.e. control output for angular speed error 1 rad/s.
  *
  * @min 0.0
- * @max 0.5
- * @decimal 3
- * @increment 0.01
+ * @max 5.0
+ * @decimal 5
+ * @increment 0.05
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_ROLLRATE_P, 0.15f);
+PARAM_DEFINE_FLOAT(DP_ROLLRATE_P, 2.5f);
 
 /**
- * Roll rate I gain
+ * Roll rate I gain x100
  *
  * Roll rate integral gain. Can be set to compensate static thrust difference or gravity center offset.
  *
  * @min 0.0
  * @decimal 3
- * @increment 0.01
+ * @increment 0.1
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_ROLLRATE_I, 0.05f);
+PARAM_DEFINE_FLOAT(DP_ROLLRATE_I, 10.0f);
 
 /**
- * Roll rate integrator limit
+ * Roll rate integrator limit x100
  *
  * Roll rate integrator limit. Can be set to increase the amount of integrator available to counteract disturbances or reduced to improve settling time after large roll moment trim changes.
  *
  * @min 0.0
+ * @max 120
  * @decimal 2
- * @increment 0.01
+ * @increment 0.1
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_RR_INT_LIM, 0.30f);
+PARAM_DEFINE_FLOAT(DP_RR_INT_LIM, 100.0f);
 
 /**
- * Roll rate D gain
+ * Roll rate D gain x100
  *
  * Roll rate differential gain. Small values help reduce fast oscillations. If value is too big oscillations will appear again.
  *
  * @min 0.0
- * @max 0.01
- * @decimal 4
- * @increment 0.0005
+ * @max 1.0
+ * @decimal 2
+ * @increment 0.02
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_ROLLRATE_D, 0.003f);
+PARAM_DEFINE_FLOAT(DP_ROLLRATE_D, 0.01f);
 
 /**
- * Roll rate feedforward
+ * Roll rate feedforward x100
  *
  * Improves tracking performance.
  *
  * @min 0.0
- * @decimal 4
+ * @max 30.0
+ * @decimal 2
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_ROLLRATE_FF, 0.0f);
+PARAM_DEFINE_FLOAT(DP_ROLLRATE_FF, 10.0f);
 
 /**
- * Pitch P gain
+ * Pitch P gain x100
  *
  * Pitch proportional gain, i.e. desired angular speed in rad/s for error 1 rad.
  *
  * @unit 1/s
  * @min 0.0
- * @max 10
+ * @max 50
  * @decimal 2
- * @increment 0.0005
+ * @increment 0.5
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_PITCH_P, 6.5f);
+PARAM_DEFINE_FLOAT(DP_PITCH_P, 2.50f);
 
 /**
- * Pitch rate P gain
+ * Pitch rate P gain x100
  *
  * Pitch rate proportional gain, i.e. control output for angular speed error 1 rad/s.
  *
  * @min 0.0
- * @max 0.6
- * @decimal 3
- * @increment 0.01
+ * @max 5.0
+ * @decimal 5
+ * @increment 0.05
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_PITCHRATE_P, 0.15f);
+PARAM_DEFINE_FLOAT(DP_PITCHRATE_P, 2.5f);
 
 /**
- * Pitch rate I gain
+ * Pitch rate I gain x100
  *
  * Pitch rate integral gain. Can be set to compensate static thrust difference or gravity center offset.
  *
  * @min 0.0
+ * @max 50
  * @decimal 3
- * @increment 0.01
+ * @increment 0.1
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_PITCHRATE_I, 0.05f);
+PARAM_DEFINE_FLOAT(DP_PITCHRATE_I, 5.0f);
 
 /**
- * Pitch rate integrator limit
+ * Pitch rate integrator limit x100
  *
  * Pitch rate integrator limit. Can be set to increase the amount of integrator available to counteract disturbances or reduced to improve settling time after large pitch moment trim changes.
  *
  * @min 0.0
+ * @max 100
  * @decimal 2
- * @increment 0.01
+ * @increment 1.0
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_PR_INT_LIM, 0.30f);
+PARAM_DEFINE_FLOAT(DP_PR_INT_LIM, 50.0f);
 
 /**
- * Pitch rate D gain
+ * Pitch rate D gain x100
  *
  * Pitch rate differential gain. Small values help reduce fast oscillations. If value is too big oscillations will appear again.
  *
  * @min 0.0
- * @decimal 4
- * @increment 0.0005
+ * @max 0.1
+ * @decimal 5
+ * @increment 0.005
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_PITCHRATE_D, 0.003f);
+PARAM_DEFINE_FLOAT(DP_PITCHRATE_D, 0.001f);
 
 /**
- * Pitch rate feedforward
+ * Pitch rate feedforward x100
  *
  * Improves tracking performance.
  *
  * @min 0.0
- * @decimal 4
+ * @max 10
+ * @decimal 2
+ * @increment 0.05
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_PITCHRATE_FF, 0.0f);
+PARAM_DEFINE_FLOAT(DP_PITCHRATE_FF, 0.05f);
 
 /**
- * Yaw P gain
+ * Yaw P gain x100
  *
  * Yaw proportional gain, i.e. desired angular speed in rad/s for error 1 rad.
  *
  * @unit 1/s
  * @min 0.0
- * @max 5
+ * @max 50
  * @decimal 2
  * @increment 0.1
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_YAW_P, 2.8f);
+PARAM_DEFINE_FLOAT(DP_YAW_P, 2.5f);
 
 /**
- * Yaw rate P gain
+ * Yaw rate P gain x100
  *
  * Yaw rate proportional gain, i.e. control output for angular speed error 1 rad/s.
  *
  * @min 0.0
- * @max 0.6
- * @decimal 2
- * @increment 0.01
+ * @max 4.0
+ * @decimal 4
+ * @increment 0.001
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_YAWRATE_P, 0.2f);
+PARAM_DEFINE_FLOAT(DP_YAWRATE_P, 2.5f);
 
 /**
- * Yaw rate I gain
+ * Yaw rate I gain x100
  *
  * Yaw rate integral gain. Can be set to compensate static thrust difference or gravity center offset.
  *
  * @min 0.0
+ * @max 50
  * @decimal 2
- * @increment 0.01
+ * @increment 0.1
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_YAWRATE_I, 0.1f);
+PARAM_DEFINE_FLOAT(DP_YAWRATE_I, 5.0f);
 
 /**
- * Yaw rate integrator limit
+ * Yaw rate integrator limit x100
  *
  * Yaw rate integrator limit. Can be set to increase the amount of integrator available to counteract disturbances or reduced to improve settling time after large yaw moment trim changes.
  *
  * @min 0.0
+ * @max 100.0
  * @decimal 2
- * @increment 0.01
+ * @increment 1.0
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_YR_INT_LIM, 0.30f);
+PARAM_DEFINE_FLOAT(DP_YR_INT_LIM, 50.0f);
 
 /**
- * Yaw rate D gain
+ * Yaw rate D gain x100
  *
  * Yaw rate differential gain. Small values help reduce fast oscillations. If value is too big oscillations will appear again.
  *
  * @min 0.0
- * @decimal 2
- * @increment 0.01
+ * @max 1.0
+ * @decimal 5
+ * @increment 0.0005
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_YAWRATE_D, 0.0f);
+PARAM_DEFINE_FLOAT(DP_YAWRATE_D, 0.001f);
 
 /**
- * Yaw rate feedforward
+ * Yaw rate feedforward x100
  *
  * Improves tracking performance.
  *
  * @min 0.0
- * @decimal 4
- * @increment 0.01
- * @group Dolphin Attitude Control
- */
-PARAM_DEFINE_FLOAT(DP_YAWRATE_FF, 0.0f);
-
-/**
- * Yaw feed forward
- *
- * Feed forward weight for manual yaw control. 0 will give slow responce and no overshot, 1 - fast responce and big overshot.
- *
- * @min 0.0
- * @max 1.0
+ * @max 5.0
  * @decimal 2
- * @increment 0.01
+ * @increment 0.05
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_YAW_FF, 0.5f);
+PARAM_DEFINE_FLOAT(DP_YAWRATE_FF, 5.0f);
+
 
 /**
  * Max roll rate
@@ -289,7 +301,7 @@ PARAM_DEFINE_FLOAT(DP_YAW_FF, 0.5f);
  * @increment 5
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_ROLLRATE_MAX, 220.0f);
+PARAM_DEFINE_FLOAT(DP_ROLLRATE_MAX, 360.0f);
 
 /**
  * Max pitch rate
@@ -303,7 +315,7 @@ PARAM_DEFINE_FLOAT(DP_ROLLRATE_MAX, 220.0f);
  * @increment 5
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_PITCHRATE_MAX, 220.0f);
+PARAM_DEFINE_FLOAT(DP_PITCHRATE_MAX, 360.0f);
 
 /**
  * Max yaw rate
@@ -317,10 +329,10 @@ PARAM_DEFINE_FLOAT(DP_PITCHRATE_MAX, 220.0f);
  * @increment 5
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_YAWRATE_MAX, 200.0f);
+PARAM_DEFINE_FLOAT(DP_YAWRATE_MAX, 360.0f);
 
 /**
- * Max yaw rate in auto mode
+ * Max roll rate in auto mode
  *
  * Limit for yaw rate, has effect for large rotations in autonomous mode,
  * to avoid large control output and mixer saturation. A value of significantly
@@ -329,12 +341,12 @@ PARAM_DEFINE_FLOAT(DP_YAWRATE_MAX, 200.0f);
  *
  * @unit deg/s
  * @min 0.0
- * @max 120.0
+ * @max 360.0
  * @decimal 1
  * @increment 5
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_YAWRAUTO_MAX, 45.0f);
+PARAM_DEFINE_FLOAT(DP_ROLLRAUTO_MAX, 180.0f);
 
 /**
  * Max acro roll rate
@@ -371,6 +383,67 @@ PARAM_DEFINE_FLOAT(DP_ACRO_P_MAX, 360.0f);
  * @group Dolphin Attitude Control
  */
 PARAM_DEFINE_FLOAT(DP_ACRO_Y_MAX, 360.0f);
+/**
+ * Acro mode Expo factor for Pitch and Yaw.
+ *
+ * Exponential factor for tuning the input curve shape.
+ *
+ * 0 Purely linear input curve
+ * 1 Purely cubic input curve
+ *
+ * @min 0
+ * @max 1
+ * @decimal 2
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_ACRO_EXPO, 0.69f);
+
+/**
+ * Acro mode Expo factor for Roll.
+ *
+ * Exponential factor for tuning the input curve shape.
+ *
+ * 0 Purely linear input curve
+ * 1 Purely cubic input curve
+ *
+ * @min 0
+ * @max 1
+ * @decimal 2
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_ACRO_EXPO_R, 0.69f);
+
+/**
+ * Acro mode SuperExpo factor for Pitch and Yaw.
+ *
+ * SuperExpo factor for refining the input curve shape tuned using MC_ACRO_EXPO.
+ *
+ * 0 Pure Expo function
+ * 0.7 resonable shape enhancement for intuitive stick feel
+ * 0.95 very strong bent input curve only near maxima have effect
+ *
+ * @min 0
+ * @max 0.95
+ * @decimal 2
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_ACRO_SUPEXPO, 0.7f);
+
+/**
+ * Acro mode SuperExpo factor for Roll.
+ *
+ * SuperExpo factor for refining the input curve shape tuned using MC_ACRO_EXPO_Y.
+ *
+ * 0 Pure Expo function
+ * 0.7 resonable shape enhancement for intuitive stick feel
+ * 0.95 very strong bent input curve only near maxima have effect
+ *
+ * @min 0
+ * @max 0.95
+ * @decimal 2
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_ACRO_SUPEXPOR, 0.7f);
 
 /**
  * Threshold for Rattitude mode
@@ -523,4 +596,75 @@ PARAM_DEFINE_FLOAT(DP_IDLE_SPEED, 0.15f);
  * @increment 10
  * @group Dolphin Attitude Control
  */
-PARAM_DEFINE_FLOAT(DP_DTERM_CUTOFF, 30.f);
+PARAM_DEFINE_FLOAT(DP_DTERM_CUTOFF, 25.0f);
+
+
+/**
+ * Normalized thrust to normalized voltage polynomial c0 coefficient
+ *
+ * @unit na
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_V_HZ_N_C0, 1.68E-01f);
+
+/**
+ * Normalized thrust to normalized voltage polynomial c1 coefficient
+ *
+ * @unit na
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_V_HZ_N_C1, -2.21E-01f);
+
+/**
+ * Normalized thrust to normalized voltage polynomial c2 coefficient
+ *
+ * @unit na
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_V_HZ_N_C2, 1.01f);
+
+/**
+ * Thrust to Voltage polynomial c0 coefficient
+ *
+ * @unit na
+ * @decimal 2
+ * @group Dolphin Attitude Control
+ */
+
+PARAM_DEFINE_FLOAT(DP_V_T_C0, 1.57E+00f);
+
+/**
+ * Thrust to Voltage polynomial c1 coefficient
+ *
+ * @unit na
+ * @decimal 2
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_V_T_C1, 3.11E+00f);
+
+/**
+ * Thrust to Voltage polynomial c2 coefficient
+ *
+ * @unit na
+ * @decimal 2
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_V_T_C2, 3.51E-01f);
+
+/**
+ * Torque to Voltage polynomial c2 coefficient
+ *
+ * @unit na
+ * @decimal 4
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_V_TORQ_C2, 2.182E+04f);
+
+/**
+ * Rotors Radius in meter
+ *
+ * @unit m
+ * @min 0
+ * @group Dolphin Attitude Control
+ */
+PARAM_DEFINE_FLOAT(DP_ROTOR_R, 0.03f);
