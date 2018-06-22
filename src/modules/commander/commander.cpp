@@ -792,7 +792,7 @@ Commander::handle_command(vehicle_status_s *status_local, const vehicle_command_
 						|| status_local->nav_state == vehicle_status_s::NAVIGATION_STATE_RATTITUDE)
 					    && ((sp_man.z > 0.1f && status.system_type != 12)
 							 || (fabsf(sp_man.z - 0.5f) > 0.1f && (status.system_type == 12) ))) {
-                        /* Added an extra condition to arm (not arm) near 0.5 throttle */
+                        /* Added an extra condition to arm (not arm) near 0.5 throttle for mavtype of 12 */
 						mavlink_log_critical(&mavlink_log_pub, "Arming DENIED. Manual throttle non-zero.");
 						cmd_result = vehicle_command_s::VEHICLE_CMD_RESULT_DENIED;
 						break;
