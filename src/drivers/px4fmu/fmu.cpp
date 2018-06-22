@@ -270,6 +270,7 @@ private:
 	unsigned	_num_disarmed_set;
 	bool		_safety_off;
 	bool		_safety_disabled;
+	static bool        _disarm_outputs_on_prearm;
 	orb_advert_t		_to_safety;
 	orb_advert_t      _to_mixer_status; 	///< mixer status flags
 
@@ -344,6 +345,7 @@ const unsigned		PX4FMU::_ngpio = arraySize(PX4FMU::_gpio_tab);
 pwm_limit_t		PX4FMU::_pwm_limit;
 actuator_armed_s	PX4FMU::_armed = {};
 work_s	PX4FMU::_work = {};
+bool    PX4FMU::_disarm_outputs_on_prearm = false;
 
 PX4FMU::PX4FMU(bool run_as_task) :
 	CDev("fmu", PX4FMU_DEVICE_PATH),
@@ -492,6 +494,7 @@ PX4FMU::init()
 	}
 
 	_safety_disabled = circuit_breaker_enabled("CBRK_IO_SAFETY", CBRK_IO_SAFETY_KEY);
+    _disarm_outputs_on_prearm = circuit_breaker_enabled("CBRK_ON_PREARM", CBRK_ON_PREARM_KEY);
 
 	/* force a reset of the update rate */
 	_current_update_rate = 0;
@@ -1840,8 +1843,9 @@ PX4FMU::control_callback(uintptr_t handle,
 	if (arm_nothrottle() && !_armed.in_esc_calibration_mode) {
 		if ((control_group == actuator_controls_s::GROUP_INDEX_ATTITUDE ||
 		     control_group == actuator_controls_s::GROUP_INDEX_ATTITUDE_ALTERNATE) &&
-		    control_index == actuator_controls_s::INDEX_THROTTLE) {
+                (control_index == actuator_controls_s::INDEX_THROTTLE || _disarm_outputs_on_prearm) ) {
 			/* set the throttle to an invalid value */
+
 			input = NAN;
 		}
 	}

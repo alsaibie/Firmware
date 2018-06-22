@@ -193,3 +193,18 @@ PARAM_DEFINE_INT32(CBRK_USB_CHK, 0);
  * @group Circuit Breaker
  */
 PARAM_DEFINE_INT32(CBRK_VELPOSERR, 0);
+
+/**
+ * Circuit breaker for disarming nonthrottle channels
+ *
+ * When using io_pass mixer, the nothrottle channels are armed on prearm.
+ * Setting this parameter to 124578 will disable this action. Allowing them to only be armed when the vehicle is armed
+ * WARNING: ENABLING THIS CIRCUIT BREAKER IS AT OWN RISK
+ *
+ * @reboot_required true
+ * @min 0
+ * @max 124578
+ * @category Developer
+ * @group Circuit Breaker
+ */
+PARAM_DEFINE_INT32(CBRK_ON_PREARM, 0);
