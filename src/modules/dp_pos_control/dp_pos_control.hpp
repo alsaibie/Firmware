@@ -57,15 +57,23 @@
 #include <uORB/topics/vehicle_rates_setpoint.h>
 #include <uORB/topics/vehicle_status.h>
 #include <uORB/topics/vehicle_local_position.h>
+#include <uORB/topics/vehicle_local_position_setpoint.h>
+
 #include <uORB/uORB.h>
 
-#include <controllib/blocks.hpp>
-#include <controllib/block/BlockParam.hpp>
+#include "PositionController.hpp"
+
+namespace Dolphin {
+    template <typename _struct_T>
+    struct uorb_msg{
+        orb_id_t        msg_id {nullptr};
+        orb_advert_t	msg_pub {nullptr};
+        int             msg_sub {-1};
+        _struct_T msg {};
+    };
+}
 
 using matrix::Dcmf;
-
-
-
 
 /**
  * Dolphin position control app start / stop handling function
@@ -98,74 +106,59 @@ public:
 private:
 
     /**
-     * Position controllers
+     * Controller
      */
-    void		control_position_attitude(float dt);
-    void		control_position_full(float dt);
+
+    PositionController *controller;
 
     /**
-     * initialize some vectors/matrices from parameters
-     */
-    void        parameter_subscribe_unsubscribe(bool subscribe);
-    void		parameters_updated();
+	 * initialize some vectors/matrices from parameters
+	 */
+    template <typename _struct_T>
+    void            parameter_subscribe(_struct_T &uorb_msg);
+    template <typename _struct_T>
+    void            parameter_unsubscribe(_struct_T &uorb_msg);
+    void            parameter_subscribe_unsubscribe(bool subscribe);
 
     /**
-     * Check for parameter update and handle it.
+     * Check for msgs updates and handle it. TODO: specify type, remove unnecessary template
      */
-    void		parameter_update_poll();
-    void		battery_status_poll();
-    void		vehicle_attitude_poll();
-    void		vehicle_attitude_setpoint_poll();
-    void		vehicle_control_mode_poll();
-    void		vehicle_manual_poll();
-    void		vehicle_rates_setpoint_poll();
-    void		vehicle_status_poll();
-
-private:
+    template <typename _struct_T>
+    bool        parameter_poll(_struct_T &uorb_msg);
 
     /**
-     * Throttle PID attenuation.
+     * Publish msgs
      */
-    matrix::Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
+    template <typename _struct_T>
+    void        parameter_publish(_struct_T &urob_msg);
 
+    /**
+     * Update States and parameters
+     */
 
-    int		_params_sub{-1};		    /**< parameter updates subscription */
-    int		_battery_status_sub{-1};	/**< battery status subscription */
-    int		_v_att_sub{-1};			    /**< vehicle attitude subscription */
-    int		_v_att_sp_sub{-1};		    /**< vehicle attitude setpoint subscription */
-    int		_v_control_mode_sub{-1};	/**< vehicle control mode subscription */
-    int		_manual_control_sp_sub{-1};	/**< manual control setpoint subscription */
-    int		_v_rates_sp_sub{-1};		/**< vehicle rates setpoint subscription */
-    int		_vehicle_status_sub{-1};	/**< vehicle status subscription */
-    int		_local_pos_sub{-1};			    /**< vehicle local position */
+    void        update_states();
+    void        update_parameters(bool force = false);
 
-
-    orb_advert_t	_v_att_sp_pub{nullptr};		/**< attitude setpoint publication */
-//    orb_advert_t	_controller_status_pub{nullptr};	/**< controller status publication */
-
-    orb_id_t _att_sp_id{nullptr};		/**< pointer to correct rates setpoint uORB metadata structure */
-
-    bool		_actuators_0_circuit_breaker_enabled{false};	/**< circuit breaker to suppress output */
-
-    struct battery_status_s			    _battery_status {};	/**< battery status */
-    struct vehicle_attitude_s		    _v_att {};		        /**< vehicle attitude */
-    struct vehicle_attitude_setpoint_s	_v_att_sp {};		    /**< vehicle attitude setpoint */
-    struct vehicle_control_mode_s		_v_control_mode {};	    /**< vehicle control mode */
-    struct manual_control_setpoint_s	_manual_control_sp {};	/**< manual control setpoint */
-    struct vehicle_rates_setpoint_s		_v_rates_sp {};		    /**< vehicle rates setpoint */
-    struct vehicle_status_s			    _vehicle_status {};	    /**< vehicle status */
-    struct vehicle_local_position_s		_local_pos {};		    /**< vehicle local position */
+    Dolphin::uorb_msg<parameter_update_s>                       _params {};
+    Dolphin::uorb_msg<battery_status_s>			                _battery_status {};	/**< battery status */
+    Dolphin::uorb_msg<vehicle_attitude_s>		                _v_att {};		        /**< vehicle attitude */
+    Dolphin::uorb_msg<vehicle_attitude_setpoint_s>	            _v_att_sp {};		    /**< vehicle attitude setpoint */
+    Dolphin::uorb_msg<vehicle_control_mode_s>		            _v_control_mode {};	    /**< vehicle control mode */
+    Dolphin::uorb_msg<manual_control_setpoint_s>	            _manual_control_sp {};	/**< manual control setpoint */
+    Dolphin::uorb_msg<vehicle_rates_setpoint_s>		            _v_rates_sp {};		    /**< vehicle rates setpoint */
+    Dolphin::uorb_msg<vehicle_status_s>			                _vehicle_status {};	    /**< vehicle status */
+    Dolphin::uorb_msg<vehicle_local_position_s>		            _local_pos {};		    /**< vehicle local position */
+    Dolphin::uorb_msg<vehicle_local_position_setpoint_s>		_local_pos_sp {};		    /**< vehicle local position setpoint */
 
     perf_counter_t	_loop_perf;			/**< loop performance counter */
-
-    static constexpr const float initial_update_rate_hz = 250.f; /**< loop update rate used for initialization */
-    float _loop_update_rate_hz{initial_update_rate_hz};          /**< current rate-controller loop update rate in [Hz] */
 
     DEFINE_PARAMETERS(
     (ParamFloat<px4::params::DPC_THR_CRUISE>) _thrust_cruise,
     (ParamFloat<px4::params::DPC_THR_MAX>) _thrust_max,
     (ParamFloat<px4::params::DPC_THR_MIN>) _thrust_min,
     (ParamFloat<px4::params::DPC_THR_IDLE>) _thrust_idle,
-    (ParamInt<px4::params::DPC_SP_CTRL_MODE>) _speed_ctrl_mode
-    )
+    (ParamInt<px4::params::DPC_SP_CTRL_MODE>) _speed_ctrl_mode,
+    (ParamFloat<px4::params::DPC_MAX_TILT>) _max_tilt_angle,
+    (ParamFloat<px4::params::DPC_MAX_ROLL>) _max_roll_angle
+    );
 };
