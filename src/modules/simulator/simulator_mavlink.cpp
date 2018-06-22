@@ -90,7 +90,8 @@ void Simulator::pack_actuator_message(mavlink_hil_actuator_controls_t &msg, unsi
 	    _system_type == MAV_TYPE_VTOL_DUOROTOR ||
 	    _system_type == MAV_TYPE_VTOL_QUADROTOR ||
 	    _system_type == MAV_TYPE_VTOL_TILTROTOR ||
-	    _system_type == MAV_TYPE_VTOL_RESERVED2) {
+	    _system_type == MAV_TYPE_VTOL_RESERVED2 ||
+	    _system_type == MAV_TYPE_SUBMARINE) {
 
 		/* multirotors: set number of rotor outputs depending on type */
 
@@ -126,7 +127,6 @@ void Simulator::pack_actuator_message(mavlink_hil_actuator_controls_t &msg, unsi
 				if (i < n) {
 					/* scale PWM out PWM_DEFAULT_MIN..PWM_DEFAULT_MAX us to 0..1 for rotors */
 					msg.controls[i] = (_actuators[index].output[i] - PWM_DEFAULT_MIN) / (PWM_DEFAULT_MAX - PWM_DEFAULT_MIN);
-
 				} else {
 					/* scale PWM out PWM_DEFAULT_MIN..PWM_DEFAULT_MAX us to -1..1 for other channels */
 					msg.controls[i] = (_actuators[index].output[i] - pwm_center) / ((PWM_DEFAULT_MAX - PWM_DEFAULT_MIN) / 2);
@@ -146,7 +146,6 @@ void Simulator::pack_actuator_message(mavlink_hil_actuator_controls_t &msg, unsi
 				if (i != 4) {
 					/* scale PWM out PWM_DEFAULT_MIN..PWM_DEFAULT_MAX us to -1..1 for normal channels */
 					msg.controls[i] = (_actuators[index].output[i] - pwm_center) / ((PWM_DEFAULT_MAX - PWM_DEFAULT_MIN) / 2);
-
 				} else {
 					/* scale PWM out PWM_DEFAULT_MIN..PWM_DEFAULT_MAX us to 0..1 for throttle */
 					msg.controls[i] = (_actuators[index].output[i] - PWM_DEFAULT_MIN) / (PWM_DEFAULT_MAX - PWM_DEFAULT_MIN);
