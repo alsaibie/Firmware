@@ -13,11 +13,12 @@
 #pragma once
 
 #include <matrix/matrix/math.hpp>
+#include <mathlib/math/filter/LowPassFilter2p.hpp>
 
-using namespace matrix;
 
-namespace Controller
-{
+namespace AController {
+    using namespace matrix;
+
     struct States {
         struct Attitude {
             Quatf q;
@@ -25,9 +26,10 @@ namespace Controller
         struct Rates {
             Vector3f rpy;
         } rates;
-        struct Power{
+        struct Power {
             bool bat_scale_en;
             float bat_scale_mA;
+            float bat_V_nom;
         } power;
     };
 
@@ -41,17 +43,17 @@ namespace Controller
             float roll_move_rate;
         };
     };
-        struct Outputs {
+    struct Outputs {
         Vector<float, 4> actuator;
     };
 
     struct Gains {
         Vector3f att_p;
+        Vector3f att_ff;
         Vector3f rate_p;
         Vector3f rate_i;
         Vector3f rate_d;
         Vector3f rate_ff;
-        math::LowPassFilter2p lp_filters_d[3]; /**< low-pass filters for D-term (roll, pitch & yaw) */
         float _tpa_breakpoint_p;
         float _tpa_breakpoint_i;
         float _tpa_breakpoint_d;
@@ -61,28 +63,36 @@ namespace Controller
 
     };
 
+
     struct Limits {
         Vector3f manual_rate_max;
         Vector3f auto_rate_max;
         Vector3f acro_rate_max;
         Vector3f rate_int_lim;
-        float acro_expo_rp;
-        float acro_expo_y;
-        float acro_superexpo_rp;
-        float acro_superexpo_y;
+        float acro_expo_py;
+        float acro_expo_r;
+        float acro_superexpo_py;
+        float acro_superexpo_r;
+    };
+
+    struct Constants {
+        Vector3f Vn_norm_coefficients;
+        Vector3f VT_coefficients;
+        Vector3f VTorq_coefficients;
+        float rotor_radius;
     };
 
     struct Saturation {
 
     };
 
-    typedef enum CONTROL_MODE{
-        Manual = 0x01,
+    typedef enum {
+        Manual = 0,
         Auto,
-        Acro,
-    };
+        Acro
+    } CONTROL_MODE;
 
-    struct ControlMode{
+    struct ControlMode {
         uint8_t mode;
         bool is_armed;
     };
@@ -93,100 +103,137 @@ namespace Controller
         Vector3f rates_prev_filtered;
         Vector3f rate_int_lim;
     };
-}
 
-class AttitudeController {
-
-public:
-    AttitudeController();
-    ~AttitudeController() {};
-
-    /* Input Interfaces */
-    void updateStates(const Controller::States &state){ _state = state; }
-    void updateAttitudeSetpoint(const Controller::Setpoints::Attitude &att_sp){ _att_sp = att_sp;}
-    void updateRateSetpoint(const Controller::Setpoints::Rates &rates_sp){ _rates_sp = rates_sp;}
-    void updateGains(const Controller::Gains &gains) {_gains = gains;}
-    void updateLimits(const Controller::Limits &limits) {_limits = limits;
-        _gains.lp_filters_d[0].reset(_ctrl_status.rates_prev(0));
-        _gains.lp_filters_d[1].reset(_ctrl_status.rates_prev(1));
-        _gains.lp_filters_d[2].reset(_ctrl_status.rates_prev(2));
+    inline float poly_abs_discontinuos(const Vector3f &v, const float x) {
+        /** Simple 2nd degree polynomial - reserves sign of x, assumes positive curve fitting */
+        float ret = v(0);
+        for (int k = 1; k < 3; k++ ){
+            ret += v(k) * (float)pow(fabs(x), k);
+        }
+        if (x > 0.0f){
+            if (ret < 0.0f){
+                return 0.0f;
+            }
+            else return ret;
+        }
+        else if (x < 0.0f){
+            if (-ret > 0.0f){
+                return 0.0f;
+            }
+            else return -ret;
+        }
+        else {
+            return 0.0f;
+        }
     }
-    void updateSaturations(const Controller::Saturation &saturation) {_saturation = saturation;}
-    void updateControlMode(const Controller::ControlMode mode){_mode = mode;}
-    void resetSetpoints();
-    /* Controller Executions */
-    void controlAttitude(const float &dt); /**/
-    void controlRates(const float &dt);
 
-    /* Output Interfaces */
-    Controller::Setpoints::Rates getRateSetpoint() { return _rates_sp; }
-    Controller::Outputs getCompensatedControlOutput() { return _compensated_u;}
-    Controller::ControllerStatus getControllerStatus() {return _ctrl_status;}
 
-private:
+    class AttitudeController {
 
-    /* States */
-    Controller::States _state {};
+    public:
+        AttitudeController();
 
-    /* Setpoints - Not necessary provided together in the controller configuration */
-    Controller::Setpoints::Attitude   _att_sp {};
-    Controller::Setpoints::Rates      _rates_sp {};
+        ~AttitudeController() {};
 
-    /* Control Intermediate Outputs */
-    Vector3f         _rates_actuator_u {};
-    Vector<float, 4> _mixed_actuator_u {};
+        /* Input Interfaces */
+        void updateStates(const AController::States &state) { _state = state; }
 
-    /* Control Gains,  Limits and Saturation */
-    Controller::Gains _gains {};
-    Controller::Limits _limits {};
-    Controller::Saturation _saturation {};
-    static constexpr const float initial_update_rate_hz = 250.f; /**< loop update rate used for initialization */
-    Controller::ControlMode _mode {}; // TODO: Fix type
+        void updateAttitudeSetpoint(const AController::Setpoints::Attitude &att_sp) { _att_sp = att_sp; }
 
-    /* Control Variables */
-    Controller::ControllerStatus _ctrl_status;
-//
-//    Vector3f _rates_int {};
-//    Vector3f _rates_prev {};
-//    Vector3f _rates_prev_filtered {};
-//    Vector3f _rate_int_lim {};
+        void updateRateSetpoint(const AController::Setpoints::Rates &rates_sp) { _rates_sp = rates_sp; }
 
-    /* Control Output */
-    Controller::Outputs _compensated_u {};
+        void updateGains(const AController::Gains &gains) { _gains = gains; }
 
-    /* Internal Routines */
-    void compensateThrusterDynamics(const float &dt);
-    void limitSaturation();
-    void mixOutput();
-    Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
+        void updateLimits(const AController::Limits &limits) { _limits = limits; }
 
-    /**
-    * Rotor Mixing scales
-    */
-    static const int _rotor_count{4};
-    static const int _mix_length{5};
-    struct  rotors_vector{
-        float	roll_scale;	    /**< scales roll for this rotor */
-        float	pitch_scale;	/**< scales pitch for this rotor */
-        float	yaw_scale;	    /**< scales yaw for this rotor */
-        float thrust_scale;     /**< scales Thrust for this rotor */
-        float	out_scale;	    /**< scales total out for this rotor */
-    } _rotors[_rotor_count];
+        void updateConstants(const AController::Constants &constants) { _constants = constants; }
 
-    /** Mixing Table. Order: Rollscale, PitchScale, YawScale, ThrustScale, OutScale */
-//    static constexpr float _dolphin_x_table[_rotor_count][_mix_length] = {
-//            { -1.000000,  0.707107,  -0.707107, 1.000000, 1.000000 },
-//            { -1.000000,  -0.707107,  0.707107, 1.000000, 1.000000 },
-//            { 1.000000, 0.707107,   0.707107, 1.000000, 1.000000 },
-//            { 1.000000, -0.707107, -0.707107, 1.000000, 1.000000 },
-//    };
-    float _dolphin_x_table[_rotor_count][_mix_length] = {
-            { -1.000000,  0.5,  -0.5, 1.000000, 1.000000 },
-            { -1.000000,  -0.5,  0.5, 1.000000, 1.000000 },
-            { 1.000000, 0.5,   0.5, 1.000000, 1.000000 },
-            { 1.000000, -0.5, -0.5, 1.000000, 1.000000 },
+//    void updateFilters(const Controller::Filters &filters) {_filters = filters;}
+        void updateSaturations(const AController::Saturation &saturation) { _saturation = saturation; }
+
+        void updateControlMode(const AController::ControlMode mode) { _mode = mode; }
+
+        void setFilter(math::LowPassFilter2p *filt) { _filters = filt; }
+
+        void resetSetpoints();
+
+        /* Controller Executions */
+        void controlAttitude(const float &dt); /**/
+        void controlRates(const float &dt);
+
+        /* Output Interfaces */
+        AController::Limits getLimits() { return _limits; }
+
+        AController::Gains getGains() { return _gains; }
+
+        AController::Setpoints::Rates getRateSetpoint() { return _rates_sp; }
+
+        Vector3f getTauSetpoint() { return _tau_sp; }
+
+        Vector<float, 4> getCompensatedVoltageSetpoint() { return _compensated_V_sp; }
+
+        AController::Outputs getMixedControlOutput() { return _mixed_u; }
+
+        AController::ControllerStatus getControllerStatus() { return _ctrl_status; }
+
+    private:
+
+        /* States */
+        AController::States _state{};
+
+        /* Setpoints - Not necessary provided together in the controller configuration */
+        AController::Setpoints::Attitude _att_sp{};
+        AController::Setpoints::Rates _rates_sp{};
+
+        /* Control Intermediate Outputs */
+        Vector3f _tau_sp{};
+        Vector<float, 4> _compensated_V_sp{};
+
+        /* Control Gains,  Limits and Saturation */
+        AController::Gains _gains{};
+        AController::Limits _limits{};
+        AController::Constants _constants{};
+        math::LowPassFilter2p *_filters; // TODO: Share ptr for now, but break dependency for complete abstraction
+        AController::Saturation _saturation{};
+        static constexpr const float initial_update_rate_hz = 250.f; /**< loop update rate used for initialization */
+        AController::ControlMode _mode{};
+
+        /* Control Variables */
+        AController::ControllerStatus _ctrl_status;
+
+        /* Control Output */
+        AController::Outputs _mixed_u{};
+
+        /* Internal Routines */
+        void compensateThrusterDynamics();
+
+        void mixOutput();
+
+        Vector3f pid_attenuations(float tpa_breakpoint, float tpa_rate);
+
+        /**
+        * Rotor Mixing scales
+        */
+        static const int _rotor_count{4};
+        static const int _mix_length{5};
+        struct rotors_vector {
+            float roll_scale;        /**< scales roll for this rotor */
+            float pitch_scale;    /**< scales pitch for this rotor */
+            float yaw_scale;        /**< scales yaw for this rotor */
+            float thrust_scale;     /**< scales Thrust for this rotor */
+            float out_scale;        /**< scales total out for this rotor */
+        } _rotors[_rotor_count];
+
+        /** Mixing Table. Order: Rollscale, PitchScale, YawScale, ThrustScale, OutScale */
+        float _dolphin_x_table[_rotor_count][_mix_length] = {
+                {1.000000, -0.5, -0.5, 1.000000, 1.000000},
+                {1.000000,  0.5,  0.5, 1.000000, 1.000000},
+                {-1.000000, -0.5,  0.5, 1.000000, 1.000000},
+                {-1.000000,  0.5, -0.5, 1.000000, 1.000000},
+        };
+
+
     };
-
 };
 
 
