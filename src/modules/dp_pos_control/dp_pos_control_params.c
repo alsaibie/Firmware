@@ -113,3 +113,26 @@ PARAM_DEFINE_FLOAT(DPC_THR_IDLE, 0.0f);
  */
 PARAM_DEFINE_INT32(DPC_SP_CTRL_MODE, 0);
 
+/**
+ * Maximum Tilt Angle
+ *
+ * @unit deg
+ * @min 0.0
+ * @max 180.0
+ * @decimal 1
+ * @group Dolphin Position Control
+ */
+PARAM_DEFINE_FLOAT(DPC_MAX_TILT, 120.0f);
+
+/**
+ * Maximum Roll Angle
+ *
+ * @unit deg/s
+ * @min 0.0
+ * @max 180.0
+ * @decimal 1
+ * @group Dolphin Position Control
+ */
+PARAM_DEFINE_FLOAT(DPC_MAX_ROLL, 120.0f);
+
+
