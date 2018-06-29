@@ -189,8 +189,8 @@ AttitudeController::controlRates(const float &dt) {
 //             (double)rates_err(0), (double)rates_err(1),
 //             (double)rates_err(2));
 
-    PX4_INFO("Rates Error Pitch: %f",
-             (double)rates_err(1));
+//    PX4_INFO("Rates Error Pitch: %f",
+//             (double)rates_err(1));
 
 //    PX4_INFO("Rates SP Roll:%f, Pitch: %f, Yaw: %f",
 //             (double)_rates_sp.rpy(0), (double)_rates_sp.rpy(1),
@@ -229,7 +229,7 @@ AttitudeController::controlRates(const float &dt) {
 
             float rate_i = _ctrl_status.rates_int(i) + _gains.rate_i(i) * rates_err(i) * dt ;
 
-            PX4_INFO("Rates int i: %d, value %f", i, (double) rate_i);
+//            PX4_INFO("Rates int i: %d, value %f", i, (double) rate_i);
             if (PX4_ISFINITE(rate_i) && rate_i > -_ctrl_status.rate_int_lim(i)  && rate_i <
                                                                                   _ctrl_status.rate_int_lim(i)) {
                 _ctrl_status.rates_int(i) = rate_i ;
