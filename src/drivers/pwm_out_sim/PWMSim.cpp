@@ -254,7 +254,7 @@ PWMSim::run()
 				    _actuator_outputs.output[i] >= -1.0f &&
 				    _actuator_outputs.output[i] <= 1.0f) {
 					/* scale for PWM output 1000 - 2000us */
-					_actuator_outputs.output[i] = 1500 + (500 * _actuator_outputs.output[i]);
+					_actuator_outputs.output[i] = 1500 + (400 * _actuator_outputs.output[i]);
 
 					if (_actuator_outputs.output[i] > _pwm_max[i]) {
 						_actuator_outputs.output[i] = _pwm_max[i];

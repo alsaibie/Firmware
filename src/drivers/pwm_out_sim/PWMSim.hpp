@@ -51,6 +51,7 @@
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/actuator_outputs.h>
 #include <uORB/topics/parameter_update.h>
+#include <parameters/param.h>
 
 class PWMSim : public device::CDev, public ModuleBase<PWMSim>
 {
