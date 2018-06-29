@@ -2246,7 +2246,7 @@ Commander::run()
 			if (in_armed_state &&
 			    status.rc_input_mode != vehicle_status_s::RC_IN_MODE_OFF &&
 			    (status.is_rotary_wing || (!status.is_rotary_wing && land_detector.landed)) &&
-			    (stick_in_lower_left || arm_button_pressed || arm_switch_to_disarm_transition)) {
+			    ((stick_in_lower_left && status.system_type != 12) || arm_button_pressed || arm_switch_to_disarm_transition)) {
 
 				if (internal_state.main_state != commander_state_s::MAIN_STATE_MANUAL &&
 				    internal_state.main_state != commander_state_s::MAIN_STATE_ACRO &&
@@ -2278,7 +2278,7 @@ Commander::run()
 
 			if (!in_armed_state &&
 			    status.rc_input_mode != vehicle_status_s::RC_IN_MODE_OFF &&
-			    (stick_in_lower_right || arm_button_pressed || arm_switch_to_arm_transition)) {
+			    ((stick_in_lower_right && status.system_type != 12) || arm_button_pressed || arm_switch_to_arm_transition)) {
 				if ((stick_on_counter == rc_arm_hyst && stick_off_counter < rc_arm_hyst) || arm_switch_to_arm_transition) {
 
 					/* we check outside of the transition function here because the requirement
