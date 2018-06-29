@@ -52,7 +52,7 @@ then
     param set DP_ROTOR_R 0.03
 
     # PWM range
-    param set PWM_DISARMED 900
+    param set PWM_DISARMED 540
     param set PWM_MIN 1100
     param set PWM_MAX 1900
 
@@ -62,6 +62,9 @@ then
 
 fi
 
+set PWM_DISARMED 540
+set PWM_MIN 1100
+set PWM_MAX 1900
 set PWM_RATE 400
 set PWM_OUT 1234
 

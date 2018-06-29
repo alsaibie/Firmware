@@ -23,8 +23,12 @@ set MAV_TYPE 12
 
 # no safety switch needed
 param set CBRK_IO_SAFETY    22027
+
 #don't arm nothrottle attitude channels if prearmed (This is included in circuit_breaker.h and implemented in fmu.cpp)
 param set CBRK_ON_PREARM 124578
 
-#no Airspeed Sensor Needed
+# no Airspeed Sensor Needed
 param set CBRK_AIRSPD_CHK 	162128 # Required to override airspeed sensor check for arming
+
+#disable disarm on land
+param set COM_DISARM_LAND 0
